@@ -16,6 +16,9 @@ RIOT_API_KEY = os.getenv("RIOT_API_KEY")
 RIOT_PUUID = os.getenv("RIOT_PUUID")
 RIOT_API_BASE_URL = "https://americas.api.riotgames.com"
 
+# --- News API Configuration ---
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+
 # --- Obsidian API Configuration ---
 OBSIDIAN_API_KEY = os.getenv("OBSIDIAN_API_KEY")
 if not OBSIDIAN_API_KEY:

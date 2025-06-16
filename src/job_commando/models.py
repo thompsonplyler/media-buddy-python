@@ -1,6 +1,7 @@
-from . import db
+from src.job_commando.extensions import db
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 
 class User(db.Model):
     # Using discord_id as the primary key since it's unique per user
@@ -21,4 +22,18 @@ class DailyLog(db.Model):
     last_updated = db.Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
-        return f'<DailyLog {self.log_date.isoformat()}>' 
+        return f'<DailyLog {self.log_date.isoformat()}>'
+
+class NewsArticle(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String, unique=True, nullable=False)
+    title = db.Column(db.String, nullable=False)
+    raw_content = db.Column(db.Text, nullable=False)
+    summary = db.Column(db.Text, nullable=True)
+    
+    # The embedding dimension must match the model output.
+    # all-MiniLM-L6-v2 produces a 384-dimensional vector.
+    embedding = db.Column(Vector(384))
+
+    def __repr__(self):
+        return f'<NewsArticle {self.title}>' 
