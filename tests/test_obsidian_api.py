@@ -1,6 +1,6 @@
-import pytest
-from unittest.mock import Mock
-from src.job_commando import obsidian_api
+import unittest
+from src.media_buddy import obsidian_api
+from unittest.mock import patch, MagicMock
 from datetime import date
 import requests
 
@@ -10,7 +10,7 @@ def test_daily_log_exists_when_true(mocker):
     indicates the file exists (returns status 200).
     """
     # Arrange
-    mock_response = Mock()
+    mock_response = MagicMock()
     mock_response.status_code = 200
     mocker.patch('requests.head', return_value=mock_response)
     
@@ -27,7 +27,7 @@ def test_daily_log_exists_when_false(mocker):
     indicates the file does not exist (returns status 404).
     """
     # Arrange
-    mock_response = Mock()
+    mock_response = MagicMock()
     mock_response.status_code = 404
     mocker.patch('requests.head', return_value=mock_response)
     

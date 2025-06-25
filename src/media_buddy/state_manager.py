@@ -1,6 +1,8 @@
 import json
 import requests
 from datetime import datetime
+import yaml
+import os
 
 from . import config
 
@@ -79,7 +81,55 @@ def delete_state(date: datetime.date):
 # --- Test Execution ---
 if __name__ == "__main__":
     # This block allows for manual state deletion for testing purposes.
-    from src.job_commando import config # Re-import for test scope
+    from src.media_buddy import config # Re-import for test scope
     today = datetime.now().date()
     print(f"--- Running State Manager Manually for Date: {today} ---")
-    delete_state(today) 
+    delete_state(today)
+
+# This is a simple file-based state manager.
+# In a larger application, this might be Redis, a database, etc.
+STATE_FILE_PATH = "instance/app_state.yml"
+
+def get_state():
+    """Returns the current application state."""
+    return {}
+
+def save_state(new_state):
+    """Saves the application state to the YAML file."""
+    try:
+        # Ensure the instance directory exists
+        os.makedirs(os.path.dirname(STATE_FILE_PATH), exist_ok=True)
+        with open(STATE_FILE_PATH, 'w') as f:
+            yaml.safe_dump(new_state, f)
+    except Exception as e:
+        print(f"Error saving state: {e}")
+
+def get_last_checkin_time(checkin_type):
+    """Returns the last check-in time for a given check-in type."""
+    state = get_state()
+    return state.get(checkin_type)
+
+def update_last_checkin_time(checkin_type):
+    """Updates the timestamp for a given check-in type to now."""
+    state = get_state()
+    state[checkin_type] = datetime.utcnow()
+    save_state(state)
+
+# --- Test Cases ---
+if __name__ == '__main__':
+    # This block allows for direct testing of the state manager.
+    
+    # To run this test, you need to ensure the application's config is loaded
+    # because this script might be run from a different context than the main app.
+    # This is a common pattern for making modules runnable and testable.
+    import sys
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+    from src.media_buddy import config # Re-import for test scope
+
+    def test_state_manager():
+        print("--- Testing State Manager ---")
+        
+        # 1. Clean up old state file if it exists
+        # ... existing code ...
+
+        # ... rest of the test code ... 

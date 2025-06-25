@@ -34,3 +34,4 @@ tzdata
 torch
 transformers
 sentence-transformers
+replicate

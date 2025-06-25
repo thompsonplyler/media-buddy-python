@@ -2,10 +2,15 @@ import requests
 import logging
 import os
 import sys
-from src.job_commando import config
+from dotenv import load_dotenv
+from src.media_buddy import config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - %(message)s')
+
+load_dotenv()
+
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
 
 BASE_URL = "https://newsapi.org/v2/everything"
 
@@ -21,15 +26,16 @@ def fetch_articles(query: str, from_date: str = None, language: str = 'en'):
     Returns:
         list: A list of articles, or an empty list if an error occurs.
     """
-    if not config.NEWS_API_KEY:
+    if not NEWS_API_KEY:
         logging.error("NEWS_API_KEY not found in environment. Cannot fetch articles.")
         return []
 
     params = {
         'q': query,
         'language': language,
-        'apiKey': config.NEWS_API_KEY,
-        'sortBy': 'relevancy' # Or 'popularity', 'publishedAt'
+        'apiKey': NEWS_API_KEY,
+        'sortBy': 'relevancy', # Or 'popularity', 'publishedAt'
+        'pageSize': 10
     }
     if from_date:
         params['from'] = from_date
@@ -56,7 +62,7 @@ def fetch_articles(query: str, from_date: str = None, language: str = 'en'):
 if __name__ == '__main__':
     # This block needs the path correction to run standalone
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-    from src.job_commando.news_client import fetch_articles
+    from src.media_buddy.news_client import fetch_articles
 
     test_articles = fetch_articles(query="artificial intelligence")
     if test_articles:

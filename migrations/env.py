@@ -5,6 +5,10 @@ from flask import current_app
 
 from alembic import context
 
+# Custom imports to provide context for autogenerate
+from pgvector.sqlalchemy import Vector
+from src.media_buddy import models
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -62,10 +66,17 @@ def run_migrations_offline():
     Calls to context.execute() here emit the given string to the
     script output.
 
+    This config is only needed for the 'offline' mode.
+    For 'online' mode, we just need to tell Alembic
+    what Engine to use.
+
     """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url, target_metadata=get_metadata(), literal_binds=True
+        url=url,
+        target_metadata=models.db.metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
     )
 
     with context.begin_transaction():
@@ -99,7 +110,7 @@ def run_migrations_online():
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=get_metadata(),
+            target_metadata=models.db.metadata,
             **conf_args
         )
 

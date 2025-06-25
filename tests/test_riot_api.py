@@ -1,6 +1,7 @@
-import pytest
-from unittest.mock import Mock
-from src.job_commando.riot_api import get_matches_played_today, RIOT_API_BASE_URL
+import unittest
+from src.media_buddy.riot_api import get_matches_played_today, RIOT_API_BASE_URL
+from unittest.mock import patch, MagicMock
+from datetime import datetime
 import requests
 
 # --- Test Data ---
@@ -13,7 +14,7 @@ def test_get_matches_played_today_success(mocker):
     when the Riot API call is successful.
     """
     # Arrange: Mock the requests.get call
-    mock_response = Mock()
+    mock_response = MagicMock()
     expected_matches = ["NA1_123", "NA1_456", "NA1_789"]
     mock_response.json.return_value = expected_matches
     mock_response.raise_for_status.return_value = None  # Do nothing when called
@@ -36,7 +37,7 @@ def test_get_matches_played_today_api_error(mocker):
     Tests that the function returns -1 when the Riot API returns an error.
     """
     # Arrange: Mock the requests.get call to simulate an HTTP error
-    mock_response = Mock()
+    mock_response = MagicMock()
     mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("403 Client Error: Forbidden")
     mocker.patch('requests.get', return_value=mock_response)
 

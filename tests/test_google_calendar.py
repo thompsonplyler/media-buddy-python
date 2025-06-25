@@ -1,19 +1,19 @@
-import pytest
-from unittest.mock import Mock, patch
-from src.job_commando.google_calendar import create_quick_checkin_event
+import unittest
+from src.media_buddy.google_calendar import create_quick_checkin_event
+from unittest.mock import patch, MagicMock
 import datetime
 
-@patch('src.job_commando.google_calendar.get_calendar_service')
+@patch('src.media_buddy.google_calendar.get_calendar_service')
 def test_create_quick_checkin_event_success(mock_get_service):
     """
     Tests that the function correctly calls the Google Calendar API
     with a properly structured event.
     """
     # Arrange: Mock the entire service object and its chained calls
-    mock_service = Mock()
-    mock_events = Mock()
-    mock_insert = Mock()
-    mock_execute = Mock()
+    mock_service = MagicMock()
+    mock_events = MagicMock()
+    mock_insert = MagicMock()
+    mock_execute = MagicMock()
 
     # Configure the mock objects to simulate the chain: service.events().insert().execute()
     mock_get_service.return_value = mock_service
@@ -40,7 +40,7 @@ def test_create_quick_checkin_event_success(mock_get_service):
     assert 'dateTime' in event_body['start']
     assert 'dateTime' in event_body['end']
 
-@patch('src.job_commando.google_calendar.get_calendar_service')
+@patch('src.media_buddy.google_calendar.get_calendar_service')
 def test_create_quick_checkin_event_failure(mock_get_service):
     """
     Tests that the function returns False when the API call fails.

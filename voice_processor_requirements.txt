@@ -1,0 +1,18 @@
+# Voice Processor Dependencies
+# Copy these to your new Flask project's requirements.txt
+
+# Core AI/ML libraries
+google-generativeai>=0.8.0
+sentence-transformers>=2.2.2
+torch>=1.13.0
+
+# Flask integration
+Flask>=2.0.0
+click>=8.0.0
+
+# Optional: Database support (if you want to store embeddings)
+# pgvector>=0.2.0  # For PostgreSQL vector storage
+# psycopg2-binary>=2.9.0  # PostgreSQL adapter
+
+# Standard libraries (usually included with Python)
+# os, logging, json, typing are built-in 
