@@ -35,3 +35,7 @@ torch
 transformers
 sentence-transformers
 replicate
+playwright
+feedparser
+beautifulsoup4
+lxml

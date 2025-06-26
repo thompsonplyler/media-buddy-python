@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify, request
 import google.generativeai as genai
 from . import config, db
-from .models import User, DailyLog
-from .riot_api import get_puuid_by_riot_id, get_match_ids_by_puuid, get_match_details_by_id, get_match_timeline_by_id
+from .models import DailyLog
 import os
 import json
 from datetime import date
@@ -128,110 +127,4 @@ def get_log(log_date_str):
         print(f"Error retrieving log: {e}")
         return jsonify({"error": "An error occurred while retrieving the log."}), 500 
 
-@main.route('/api/summ/set', methods=['POST'])
-def set_summoner():
-    data = request.json
-    discord_id = data.get('discord_id')
-    discord_name = data.get('discord_name')
-    summoner_name = data.get('summoner_name')
-    summoner_tag = data.get('summoner_tag')
-
-    if not all([discord_id, discord_name, summoner_name, summoner_tag]):
-        return jsonify({"error": "Missing required fields."}), 400
-
-    puuid = get_puuid_by_riot_id(config.RIOT_API_KEY, summoner_name, summoner_tag)
-
-    if not puuid:
-        return jsonify({"error": f"Could not find a Riot account for {summoner_name}#{summoner_tag}. Please check the name and tag."}), 404
-
-    # Check if user exists, if not create one
-    user = User.query.get(discord_id)
-    if not user:
-        user = User(discord_id=discord_id, discord_name=discord_name)
-    
-    # Update user details
-    user.lol_summoner_name = summoner_name
-    user.lol_summoner_tag = summoner_tag
-    user.puuid = puuid
-    
-    db.session.add(user)
-    db.session.commit()
-
-    return jsonify({
-        "message": f"Successfully linked your Discord to {summoner_name}#{summoner_tag}.",
-        "summoner_name": user.lol_summoner_name,
-        "summoner_tag": user.lol_summoner_tag,
-        "puuid": user.puuid
-    })
-
-@main.route('/api/summ/show/<int:discord_id>', methods=['GET'])
-def show_summoner(discord_id):
-    user = User.query.get(discord_id)
-    if not user or not user.puuid:
-        return jsonify({"error": "No Riot account is linked to this Discord ID. Use `$summ set <name>#<tag>` to link one."}), 404
-
-    return jsonify({
-        "discord_name": user.discord_name,
-        "summoner_name": user.lol_summoner_name,
-        "summoner_tag": user.lol_summoner_tag,
-        "puuid": user.puuid # Included for testing as requested
-    })
-
-@main.route('/api/summ/last/<int:discord_id>', methods=['GET'])
-def last_game_roast(discord_id):
-    user = User.query.get(discord_id)
-    if not user or not user.puuid:
-        return jsonify({"error": "No Riot account is linked to this Discord ID. Use `$summ set <name>#<tag>` to link one."}), 404
-
-    # 1. Get the last match ID
-    match_ids = get_match_ids_by_puuid(config.RIOT_API_KEY, user.puuid, count=1)
-    if not match_ids:
-        return jsonify({"error": "Couldn't find any recent matches for your account."}), 404
-    last_match_id = match_ids[0]
-
-    # 2. Get match details and timeline
-    match_details = get_match_details_by_id(config.RIOT_API_KEY, last_match_id)
-    match_timeline = get_match_timeline_by_id(config.RIOT_API_KEY, last_match_id)
-
-    if not match_details or not match_timeline:
-        return jsonify({"error": "Could not retrieve full details for the last match."}), 500
-
-    # 3. Read and prepare the roast prompt
-    try:
-        with open('ROAST_PROMPT.MD', 'r', encoding='utf-8') as f:
-            roast_prompt_template = f.read()
-        
-        # Replace placeholders
-        roast_prompt = roast_prompt_template.replace('{puuid}', user.puuid)
-        roast_prompt = roast_prompt.replace('{discord_name}', user.discord_name)
-
-    except FileNotFoundError:
-        return jsonify({"error": "ROAST_PROMPT.MD not found on the server."}), 500
-    except Exception as e:
-        return jsonify({"error": f"Error reading prompt file: {e}"}), 500
-
-    # 4. Combine all data for the Gemini prompt
-    # We provide the system prompt (the roast instructions) and then the data
-    system_prompt = roast_prompt
-    full_user_prompt = (
-        f"Here is the data for the match. Please provide the analysis as described in the instructions.\n\n"
-        f"--- MATCH DETAILS ---\n"
-        f"{json.dumps(match_details, indent=2)}\n\n"
-        f"--- MATCH TIMELINE ---\n"
-        f"{json.dumps(match_timeline, indent=2)}"
-    )
-
-    # 5. Call Gemini
-    try:
-        model = genai.GenerativeModel(
-            'gemini-2.5-pro-preview-06-05',
-            system_instruction=system_prompt
-        )
-        response = model.generate_content(full_user_prompt)
-        roast_text = response.text
-        
-        return jsonify({"roast": roast_text})
-
-    except Exception as e:
-        print(f"Error calling Gemini API for roast: {e}")
-        return jsonify({"error": "An error occurred while generating the roast from Gemini."}), 500 
+# Riot-related routes removed - functionality not needed for media-buddy 

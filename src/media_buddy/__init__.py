@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 from src.media_buddy.config import Config
 from src.media_buddy.extensions import db, migrate
 from src.media_buddy.models import NewsArticle
-from src.media_buddy.news_client import fetch_articles
-from src.media_buddy.text_processor import generate_summary, generate_embedding, generate_timeline, generate_voiced_summary_from_article
+from src.media_buddy.services.legacy_adapter import fetch_articles
+from src.media_buddy.text_processor import generate_summary, generate_embedding, generate_timeline, generate_voiced_summary_from_article, generate_voiced_summary_from_raw_content, generate_voiced_response_from_articles
 from src.media_buddy.image_scout import source_image_for_scene, generate_raw_image, apply_style_to_image
 from src.media_buddy.themes import FLUX_THEMES
 
@@ -134,6 +134,118 @@ def create_app(config_class=Config):
             print(f"\nSuccessfully generated and saved voiced summary for article {article_id}.")
         except Exception as e:
             print(f"An error occurred while generating the voiced summary: {e}")
+
+    @click.command(name='generate-voice-response')
+    @click.argument('query')
+    @click.option('--length', default=400, type=int, help='The target word count for the response.')
+    @click.option('--top-articles', default=3, type=int, help='Number of top articles to synthesize from.')
+    @with_appcontext
+    def generate_voice_response_command(query, length, top_articles):
+        """Generates Thompson's response to the top articles on a given topic."""
+        
+        print(f"🔍 Finding top {top_articles} articles for query: '{query}'")
+        
+        # Find articles matching the query with flexible keyword search
+        query_keywords = [word.strip().lower() for word in query.split() if len(word.strip()) > 2]
+        print(f"🔍 Searching for keywords: {query_keywords}")
+        
+        if not query_keywords:
+            print("❌ No valid keywords in query")
+            return
+        
+        # Build flexible search conditions
+        title_conditions = [NewsArticle.title.ilike(f'%{keyword}%') for keyword in query_keywords]
+        content_conditions = [NewsArticle.raw_content.ilike(f'%{keyword}%') for keyword in query_keywords]
+        
+        # Article matches if it contains ANY of the keywords in title OR content
+        articles = NewsArticle.query.filter(
+            NewsArticle.raw_content.isnot(None),
+            db.or_(
+                db.or_(*title_conditions),
+                db.or_(*content_conditions)
+            )
+        ).order_by(NewsArticle.id.desc()).limit(top_articles * 3).all()  # Get extra for filtering
+        
+        if not articles:
+            print(f"❌ No articles found matching '{query}'. Try running 'fetch-news \"{query}\"' first.")
+            return
+        
+        # Score articles by keyword matches and content quality
+        scored_articles = []
+        for article in articles:
+            if len(article.raw_content.strip()) < 1000:
+                continue  # Skip short articles
+                
+            # Count keyword matches
+            title_lower = article.title.lower()
+            content_lower = article.raw_content.lower()
+            
+            keyword_score = 0
+            for keyword in query_keywords:
+                if keyword in title_lower:
+                    keyword_score += 3  # Title matches worth more
+                if keyword in content_lower:
+                    keyword_score += 1
+            
+            # Bonus for multiple keyword matches
+            if keyword_score > len(query_keywords):
+                keyword_score += 2
+                
+            scored_articles.append((article, keyword_score))
+        
+        # Sort by score (highest first) and take top articles
+        scored_articles.sort(key=lambda x: x[1], reverse=True)
+        quality_articles = [article for article, score in scored_articles[:top_articles]]
+        
+        if len(quality_articles) < top_articles:
+            print(f"⚠️  Only found {len(quality_articles)} quality articles (wanted {top_articles})")
+        
+        if not quality_articles:
+            print("❌ No articles with substantial content found.")
+            return
+        
+        print(f"📰 Selected articles:")
+        for i, (article, score) in enumerate(scored_articles[:len(quality_articles)], 1):
+            print(f"  {i}. {article.title[:60]}... ({len(article.raw_content)} chars, score: {score})")
+        
+        try:
+            # Generate Thompson's response to the combined articles
+            voice_response = generate_voiced_response_from_articles(quality_articles, query, length)
+            
+            # Save to private/writing_style_samples/test/ with logical filename
+            output_dir = os.path.join('private', 'writing_style_samples', 'test')
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Create filename from query and date
+            from datetime import datetime
+            safe_query = "".join(c for c in query if c.isalnum() or c in (' ', '-')).rstrip()
+            safe_query = safe_query.replace(' ', '-').lower()
+            timestamp = datetime.now().strftime('%Y-%m-%d')
+            filename = f"{safe_query}-{timestamp}.md"
+            filepath = os.path.join(output_dir, filename)
+            
+            # Save the response
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(f"# Thompson's Response: {query}\n\n")
+                f.write(f"*Generated from {len(quality_articles)} articles on {timestamp}*\n\n")
+                f.write("---\n\n")
+                f.write(voice_response)
+                f.write("\n\n---\n\n")
+                f.write("## Source Articles:\n\n")
+                for i, article in enumerate(quality_articles, 1):
+                    f.write(f"{i}. **{article.title}**\n")
+                    f.write(f"   - URL: {article.url}\n")
+                    f.write(f"   - Content: {len(article.raw_content)} characters\n\n")
+            
+            print(f"\n💾 Saved Thompson's response to: {filepath}")
+            print("\n--- THOMPSON'S RESPONSE ---")
+            print(voice_response)
+            print("--- END ---")
+            
+        except Exception as e:
+            print(f"❌ Error generating voice response: {e}")
+            import traceback
+            traceback.print_exc()
 
     @click.command(name='generate-timeline')
     @click.option('--article-id', required=True, type=int, help='The ID of the article to process.')
@@ -453,6 +565,7 @@ def create_app(config_class=Config):
     app.cli.add_command(fetch_news_command)
     app.cli.add_command(process_articles_command)
     app.cli.add_command(generate_voiced_summary_command)
+    app.cli.add_command(generate_voice_response_command)
     app.cli.add_command(generate_timeline_command)
     app.cli.add_command(source_images_command)
     app.cli.add_command(generate_raw_images_command)

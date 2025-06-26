@@ -231,6 +231,117 @@ def generate_voiced_summary_from_article(article: NewsArticle, length: int) -> s
     response = model.generate_content(prompt)
     return response.text
 
+def generate_voiced_summary_from_raw_content(raw_content: str, length: int) -> str:
+    """
+    Generates Thompson's response to a full news article, as if he read the entire piece.
+    This bypasses intermediate summarization to preserve nuance and allow for thoughtful commentary.
+
+    Args:
+        raw_content: The complete article text to respond to.
+        length: The target word count for the response.
+
+    Returns:
+        Thompson's response in his writing voice.
+    """
+    if not raw_content or len(raw_content.strip()) < 100:
+        raise ValueError("Raw content must be substantial for voice response generation.")
+
+    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+
+    writing_style = get_writing_style_examples()
+
+    prompt = f"""
+    You are Thompson, and you've just finished reading a news article. Your task is to write your response to this article in your distinctive voice and style, as if you're commenting on it or sharing your thoughts about it with others.
+
+    **CRITICAL INSTRUCTION: This is not a summary.**
+    - **DO NOT** simply rewrite or summarize the article
+    - **DO** respond to it as Thompson would - with your own perspective, analysis, commentary, or reaction
+    - **DO** capture Thompson's unique writing style: tone, sentence structure, vocabulary, analogies, and way of thinking
+    - **DO** feel free to agree, disagree, add context, or provide your own insights about the topic
+    - **DO NOT** copy specific unrelated proper nouns from your style guide unless they're genuinely relevant
+
+    Your response should feel like Thompson just read this article and is now sharing his thoughts about it.
+
+    **Thompson's Writing Style Guide:**
+    ---
+    {writing_style}
+    ---
+
+    **Article Thompson Just Read:**
+    ---
+    {raw_content}
+    ---
+
+    **Your Task:**
+    Write Thompson's response to this article in approximately {length} words. This should be his commentary, analysis, or reaction - not a summary. Write as if Thompson is speaking directly to his audience about what he just read.
+    """
+
+    response = model.generate_content(prompt)
+    return response.text
+
+def generate_voiced_response_from_articles(articles: list, topic: str, length: int) -> str:
+    """
+    Generates Thompson's response to multiple articles on the same topic.
+    Synthesizes insights from all articles rather than responding to just one.
+
+    Args:
+        articles: List of NewsArticle objects to synthesize from
+        topic: The topic/query these articles relate to  
+        length: Target word count for the response
+
+    Returns:
+        Thompson's synthesized response across all articles
+    """
+    if not articles:
+        raise ValueError("At least one article required for synthesis.")
+    
+    # Combine all article content with clear separation
+    combined_content = f"TOPIC: {topic}\n\n"
+    combined_content += f"SOURCES: {len(articles)} articles\n\n"
+    
+    for i, article in enumerate(articles, 1):
+        combined_content += f"--- ARTICLE {i}: {article.title} ---\n"
+        combined_content += f"Source: {article.url}\n\n"
+        combined_content += article.raw_content
+        combined_content += f"\n\n--- END ARTICLE {i} ---\n\n"
+    
+    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+
+    writing_style = get_writing_style_examples()
+
+    prompt = f"""
+    You are Thompson, and you've just finished reading {len(articles)} different news articles about "{topic}". Your task is to write your synthesized response that draws insights from all the articles, as if you're sharing your thoughts about this topic after reading multiple perspectives.
+
+    **CRITICAL INSTRUCTIONS:**
+    - **DO NOT** simply summarize each article individually
+    - **DO** synthesize insights across all articles - find patterns, contradictions, broader implications
+    - **DO** respond as Thompson would - with your own perspective, analysis, and commentary on the topic
+    - **DO** capture Thompson's unique writing style from the style guide
+    - **DO** feel free to agree/disagree with points made, add context, or provide your own insights
+    - **DO** reference multiple sources when they support or contradict each other
+    - **DO NOT** copy specific unrelated proper nouns from your style guide
+
+    This should feel like Thompson read multiple articles on "{topic}" and is now sharing his comprehensive thoughts about the topic, drawing from what he learned across all sources.
+
+    **Thompson's Writing Style Guide:**
+    ---
+    {writing_style}
+    ---
+
+    **Articles Thompson Just Read About "{topic}":**
+    ---
+    {combined_content}
+    ---
+
+    **Your Task:**
+    Write Thompson's synthesized response to these {len(articles)} articles about "{topic}" in approximately {length} words. This should be his commentary and analysis that draws from multiple sources, not individual article summaries. Write as if Thompson is speaking directly to his audience about what he learned from reading all these articles.
+    """
+
+    response = model.generate_content(prompt)
+    return response.text
+
 if __name__ == '__main__':
     # Example usage for direct testing
     test_text = (

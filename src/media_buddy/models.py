@@ -3,18 +3,7 @@ from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 
-class User(db.Model):
-    # Using discord_id as the primary key since it's unique per user
-    discord_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False) 
-    discord_name = db.Column(db.String(100), nullable=False)
-    
-    # Riot Games specific information
-    lol_summoner_name = db.Column(db.String(80), nullable=True)
-    lol_summoner_tag = db.Column(db.String(10), nullable=True)
-    puuid = db.Column(db.String(100), unique=True, nullable=True)
-
-    def __repr__(self):
-        return f'<User discord_id={self.discord_id} discord_name={self.discord_name}>'
+# User model removed - not needed for media-buddy functionality
 
 class DailyLog(db.Model):
     log_date = db.Column(db.Date, primary_key=True)
