@@ -6,6 +6,7 @@ from flask.cli import with_appcontext
 from sqlalchemy import text
 from sqlalchemy.orm.attributes import flag_modified
 import shutil
+from pathlib import Path
 
 # Correct the path to allow for absolute imports from 'src'
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -14,7 +15,8 @@ from src.media_buddy.config import Config
 from src.media_buddy.extensions import db, migrate
 from src.media_buddy.models import NewsArticle
 from src.media_buddy.services.legacy_adapter import fetch_articles
-from src.media_buddy.text_processor import generate_summary, generate_embedding, generate_timeline, generate_voiced_summary_from_article, generate_voiced_summary_from_raw_content, generate_voiced_response_from_articles
+from src.media_buddy.text_processor import generate_summary, generate_embedding, generate_timeline, generate_voiced_summary_from_article, generate_voiced_summary_from_raw_content, generate_voiced_response_from_articles, generate_voiced_summary_from_content
+from src.media_buddy.style_learning import style_learner
 from src.media_buddy.image_scout import source_image_for_scene, generate_raw_image, apply_style_to_image
 from src.media_buddy.themes import FLUX_THEMES
 
@@ -137,7 +139,7 @@ def create_app(config_class=Config):
 
     @click.command(name='generate-voice-response')
     @click.argument('query')
-    @click.option('--length', default=400, type=int, help='The target word count for the response.')
+    @click.option('--length', default=175, type=int, help='The target word count for the 60-second script.')
     @click.option('--top-articles', default=3, type=int, help='Number of top articles to synthesize from.')
     @with_appcontext
     def generate_voice_response_command(query, length, top_articles):
@@ -237,15 +239,19 @@ def create_app(config_class=Config):
                     f.write(f"   - URL: {article.url}\n")
                     f.write(f"   - Content: {len(article.raw_content)} characters\n\n")
             
-            print(f"\n💾 Saved Thompson's response to: {filepath}")
-            print("\n--- THOMPSON'S RESPONSE ---")
+            print(f"\n💾 Saved Thompson's 60-second script to: {filepath}")
+            print("\n--- THOMPSON'S SCRIPT (60 SECONDS) ---")
             print(voice_response)
-            print("--- END ---")
+            print("--- END SCRIPT ---")
+            
+            # Return the filepath for potential chaining
+            return filepath
             
         except Exception as e:
             print(f"❌ Error generating voice response: {e}")
             import traceback
             traceback.print_exc()
+            return None
 
     @click.command(name='generate-timeline')
     @click.option('--article-id', required=True, type=int, help='The ID of the article to process.')
@@ -272,6 +278,204 @@ def create_app(config_class=Config):
         import json
         print(json.dumps(timeline, indent=2))
         print("--- END ---")
+
+    @click.command(name='process-script')
+    @click.argument('script_file')
+    @click.option('--theme', type=click.Choice(FLUX_THEMES.keys()), help='Optional visual theme for image generation.')
+    @with_appcontext
+    def process_script_command(script_file, theme):
+        """Processes a script file through the timeline and image generation pipeline."""
+        
+        # Check if file exists
+        if not os.path.exists(script_file):
+            print(f"❌ Script file not found: {script_file}")
+            return
+        
+        print(f"📄 Processing script file: {script_file}")
+        
+        try:
+            # Read the script content
+            with open(script_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Extract just the script part (between the --- markers)
+            script_start = content.find('---\n\n') + 5
+            script_end = content.find('\n\n---\n\n', script_start)
+            
+            if script_start == 4 or script_end == -1:  # markers not found
+                print("⚠️  Using entire file content as script")
+                script_content = content
+            else:
+                script_content = content[script_start:script_end].strip()
+            
+            if len(script_content) < 50:
+                print("❌ Script content too short to process")
+                return
+            
+            print(f"📝 Extracted script ({len(script_content)} characters)")
+            print(f"🎬 Generating timeline from script...")
+            
+            # Generate timeline from the script
+            timeline = generate_timeline(script_content)
+            
+            print(f"✅ Generated timeline with {len(timeline)} scenes")
+            print("\n--- TIMELINE ---")
+            import json
+            print(json.dumps(timeline, indent=2))
+            print("--- END TIMELINE ---")
+            
+            # If theme is provided, generate image prompts
+            if theme:
+                print(f"\n🎨 Processing images with theme: '{theme}'...")
+                
+                # Add image prompts to each scene
+                for scene in timeline:
+                    print(f"🖼️  Processing scene {scene['scene']}: {scene['description'][:50]}...")
+                    image_data = source_image_for_scene(scene['description'])
+                    scene.update(image_data)
+                
+                print("✅ Image prompts generated for all scenes")
+                print("\n--- UPDATED TIMELINE WITH IMAGE PROMPTS ---")
+                print(json.dumps(timeline, indent=2))
+                print("--- END ---")
+            
+            # Save the timeline to a JSON file next to the script
+            script_dir = os.path.dirname(script_file)
+            script_name = os.path.splitext(os.path.basename(script_file))[0]
+            timeline_file = os.path.join(script_dir, f"{script_name}-timeline.json")
+            
+            with open(timeline_file, 'w', encoding='utf-8') as f:
+                json.dump(timeline, f, indent=2)
+            
+            print(f"\n💾 Saved timeline to: {timeline_file}")
+            
+            if theme:
+                print(f"\n🎯 NEXT STEPS:")
+                print(f"   Timeline saved with image prompts")
+                print(f"   Ready for image generation (not implemented in this test)")
+            else:
+                print(f"\n🎯 NEXT STEPS:")
+                print(f"   Run with --theme to add image prompts")
+                print(f"   Available themes: {', '.join(FLUX_THEMES.keys())}")
+            
+        except Exception as e:
+            print(f"❌ Error processing script: {e}")
+            import traceback
+            traceback.print_exc()
+
+    @click.command(name='record-edit')
+    @click.argument('original_script_file')
+    @click.argument('edited_script_file')
+    @click.argument('topic')
+    @with_appcontext
+    def record_edit_command(original_script_file, edited_script_file, topic):
+        """Record an edit session to learn Thompson's style preferences."""
+        
+        try:
+            # Read both scripts
+            with open(original_script_file, 'r', encoding='utf-8') as f:
+                original_content = f.read()
+            
+            with open(edited_script_file, 'r', encoding='utf-8') as f:
+                edited_content = f.read()
+            
+            # Extract script content (between --- markers if present)
+            def extract_script(content):
+                start = content.find('---\n\n') + 5
+                end = content.find('\n\n---\n\n', start)
+                if start == 4 or end == -1:
+                    return content.strip()
+                return content[start:end].strip()
+            
+            original_script = extract_script(original_content)
+            edited_script = extract_script(edited_content)
+            
+            if len(original_script) < 20 or len(edited_script) < 20:
+                print("❌ Scripts too short to analyze")
+                return
+            
+            # Record the edit session
+            session_id = style_learner.record_edit_session(
+                original_script=original_script,
+                edited_script=edited_script,
+                topic=topic,
+                context={
+                    "original_file": original_script_file,
+                    "edited_file": edited_script_file
+                }
+            )
+            
+            print(f"✅ Recorded edit session: {session_id}")
+            
+            # Show recommendations based on this edit
+            recommendations = style_learner.get_style_recommendations(topic, len(original_script.split()))
+            
+            if recommendations["style_notes"]:
+                print(f"\n📚 Style insights:")
+                for note in recommendations["style_notes"]:
+                    print(f"  • {note}")
+            
+            if recommendations["common_edits"]:
+                print(f"\n🔄 Your common edits:")
+                for edit in recommendations["common_edits"]:
+                    print(f"  • {edit}")
+            
+            print(f"\n💡 Suggested length for future '{topic}' scripts: {recommendations['suggested_length']} words")
+            
+        except Exception as e:
+            print(f"❌ Error recording edit: {e}")
+            import traceback
+            traceback.print_exc()
+
+    @click.command(name='style-insights')
+    @with_appcontext
+    def style_insights_command():
+        """Show learned patterns from Thompson's editing history."""
+        
+        try:
+            # Check if we have any learning data
+            if not style_learner.edits_file.exists():
+                print("📚 No edit history found yet.")
+                print("💡 Use 'record-edit' to start building your style profile.")
+                return
+            
+            # Count total edits
+            edit_count = 0
+            with open(style_learner.edits_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        edit_count += 1
+            
+            print(f"📊 Style Learning Report")
+            print(f"Total edit sessions: {edit_count}")
+            
+            # Show successful examples
+            successful_examples = style_learner.get_successful_examples(3)
+            if successful_examples:
+                print(f"\n🌟 Recent successful examples:")
+                for i, example in enumerate(successful_examples, 1):
+                    example_name = Path(example).stem
+                    print(f"  {i}. {example_name}")
+            
+            # Show general recommendations  
+            sample_recommendations = style_learner.get_style_recommendations("general", 175)
+            
+            if sample_recommendations["style_notes"]:
+                print(f"\n📝 Your writing tendencies:")
+                for note in sample_recommendations["style_notes"]:
+                    print(f"  • {note}")
+            
+            if sample_recommendations["common_edits"]:
+                print(f"\n✏️  Your most frequent edits:")
+                for edit in sample_recommendations["common_edits"]:
+                    print(f"  • {edit}")
+            
+            print(f"\n💾 Learning data stored in: {style_learner.learning_dir}")
+            
+        except Exception as e:
+            print(f"❌ Error showing insights: {e}")
+            import traceback
+            traceback.print_exc()
 
     @click.command(name='source-images')
     @click.option('--article-id', required=True, type=int, help='The ID of the article to process.')
@@ -444,56 +648,74 @@ def create_app(config_class=Config):
 
         article = None
         try:
-            # Step 1: Get the Article
+            # Step 1: Get the Article using our new service architecture
             if query:
-                print(f"Fetching new article for query: '{query}'")
-                articles_data = fetch_articles(query)
+                print(f"Fetching new article for query: '{query}' using {os.getenv('ARTICLE_SERVICE', 'newsapi')} service")
+                
+                from .services.article_factory import ArticleServiceFactory
+                
+                # Get articles using our new service architecture
+                service = ArticleServiceFactory.create_service()
+                articles_data = service.fetch_articles(query, count=5)
+                
                 if not articles_data:
-                    print("No articles found for that query.")
+                    print("❌ No articles found for that query.")
                     return
                 
-                new_article_data = next((a for a in articles_data if not db.session.query(NewsArticle.id).filter_by(url=a['url']).first()), None)
+                # Find first new article with substantial content
+                new_article_data = None
+                for article_obj in articles_data:
+                    # Check if already exists in database
+                    existing = db.session.query(NewsArticle.id).filter_by(url=article_obj.url).first()
+                    if existing:
+                        continue
+                    
+                    # Check if content is substantial (not a snippet or CAPTCHA)
+                    content = article_obj.content or ''
+                    if len(content) > 1000:  # Require substantial content
+                        new_article_data = article_obj
+                        break
 
                 if not new_article_data:
-                    print("No *new* articles found for that query. All are already in the database.")
+                    print("❌ No new articles with substantial content found. All may be snippets, CAPTCHA pages, or already in database.")
                     return
 
                 article = NewsArticle(
-                    url=new_article_data['url'],
-                    title=new_article_data['title'],
-                    raw_content=new_article_data.get('content', '') or '',
+                    url=new_article_data.url,
+                    title=new_article_data.title,
+                    raw_content=new_article_data.content or '',
                 )
                 db.session.add(article)
                 db.session.commit()
                 article_id = article.id
-                print(f"Successfully fetched and created new article with ID: {article_id}")
+                print(f"✅ Successfully fetched and created new article with ID: {article_id}")
+                print(f"📄 Content length: {len(article.raw_content)} characters")
             else:
                 article = NewsArticle.query.get(article_id)
                 if not article:
-                    print(f"Error: Article with ID {article_id} not found.")
+                    print(f"❌ Error: Article with ID {article_id} not found.")
                     return
 
-            print(f"--- Starting processing pipeline for Article {article.id}: {article.title} ---")
+            print(f"🚀 Starting processing pipeline for Article {article.id}: {article.title}")
 
-            # Step 2: Run the asset generation pipeline
-            if not article.summary:
-                print("Generating base summary...")
-                article.summary = generate_summary(article.raw_content)
-            
+            # Step 2: Skip base summary, go directly to voiced summary with full content
             if not article.voiced_summary:
-                print("Generating voiced summary...")
-                article.voiced_summary = generate_voiced_summary_from_article(article, length)
+                print("🎤 Generating voiced summary directly from full article content...")
+                # Generate voiced summary directly from raw content (our new way)
+                article.voiced_summary = generate_voiced_summary_from_content(article.raw_content, length)
+                print(f"✅ Generated {len(article.voiced_summary.split())} word voiced summary")
             
             if not article.timeline_json:
-                print("Generating timeline...")
+                print("🎬 Generating timeline...")
                 article.timeline_json = generate_timeline(article.voiced_summary)
+                print(f"✅ Generated timeline with {len(article.timeline_json)} scenes")
             
             db.session.commit()
 
             timeline = article.timeline_json
             
-            # Re-process images every time for now to ensure consistency.
-            print("Sourcing and generating raw images...")
+            # Step 3: Process images
+            print("🖼️  Sourcing and generating raw images...")
             for scene in timeline:
                 image_data = source_image_for_scene(scene['description'])
                 scene.update(image_data)
@@ -510,7 +732,7 @@ def create_app(config_class=Config):
             flag_modified(article, "timeline_json")
             db.session.commit()
 
-            print(f"Stylizing images with theme: '{theme}'...")
+            print(f"🎨 Stylizing images with theme: '{theme}'...")
             style_prompt = FLUX_THEMES.get(theme)
             for scene in timeline:
                 raw_image_path = scene.get('raw_image_path')
@@ -526,17 +748,17 @@ def create_app(config_class=Config):
             
             flag_modified(article, "timeline_json")
             db.session.commit()
-            print("Image generation and stylization complete.")
+            print("✅ Image generation and stylization complete.")
 
-            # Step 3: Aggregate final assets
-            print("--- Aggregating final assets ---")
+            # Step 4: Aggregate final assets
+            print("📦 Aggregating final assets...")
             output_dir = os.path.join('instance', 'output', str(article.id))
             os.makedirs(output_dir, exist_ok=True)
 
             script_path = os.path.join(output_dir, 'script.txt')
             with open(script_path, 'w', encoding='utf-8') as f:
                 f.write(article.voiced_summary)
-            print(f"Voiced summary script saved to: {script_path}")
+            print(f"💾 Voiced summary script saved to: {script_path}")
 
             image_count = 0
             for i, scene in enumerate(timeline):
@@ -548,16 +770,64 @@ def create_app(config_class=Config):
                     shutil.copy(stylized_path, dest_path)
                     image_count += 1
             
-            print(f"Copied {image_count} stylized images to: {output_dir}")
+            print(f"🖼️  Copied {image_count} stylized images to: {output_dir}")
 
-            print("\n--- Voiced Summary ---")
+            print("\n" + "="*60)
+            print("🎯 VOICED SUMMARY")
+            print("="*60)
             print(article.voiced_summary)
-            print("----------------------")
+            print("="*60)
             
-            print(f"\n--- Pipeline complete for Article {article.id} ---")
+            print(f"\n🎉 Pipeline complete for Article {article.id}")
 
         except Exception as e:
-            print(f"An error occurred during the pipeline: {e}")
+            print(f"❌ An error occurred during the pipeline: {e}")
+            import traceback
+            traceback.print_exc()
+
+    @click.command(name='create-video')
+    @click.option('--article-id', type=int, help='The ID of the article to create video for.')
+    @click.option('--output-dir', type=str, help='Directory containing vo.mp3 and images (overrides article-id).')
+    @click.option('--output-filename', default='video_out.mp4', help='Name of output video file.')
+    @with_appcontext
+    def create_video_command(article_id, output_dir, output_filename):
+        """Create video from images and voiceover using FFmpeg with H.264 codec."""
+        from .services.video_service import VideoService
+        
+        try:
+            # Determine output directory
+            if output_dir:
+                target_dir = output_dir
+            elif article_id:
+                target_dir = os.path.join('instance', 'output', str(article_id))
+            else:
+                print("❌ Error: You must provide either --article-id or --output-dir.")
+                return
+            
+            if not os.path.exists(target_dir):
+                print(f"❌ Error: Directory not found: {target_dir}")
+                return
+            
+            print(f"🎬 Creating video from directory: {target_dir}")
+            
+            # Initialize video service
+            video_service = VideoService()
+            
+            # Create the video
+            video_path = video_service.create_video(target_dir, output_filename)
+            
+            # Get video info for confirmation
+            video_info = video_service.get_video_info(video_path)
+            
+            print(f"✅ Video created successfully!")
+            print(f"📁 Location: {video_path}")
+            print(f"⏱️  Duration: {video_info.get('duration', 'Unknown'):.2f} seconds")
+            print(f"📐 Resolution: {video_info.get('width', 'Unknown')}x{video_info.get('height', 'Unknown')}")
+            print(f"🎥 Codec: {video_info.get('codec', 'Unknown')}")
+            print(f"📦 Size: {video_info.get('size_bytes', 0) / (1024*1024):.1f} MB")
+            
+        except Exception as e:
+            print(f"❌ Video creation failed: {e}")
             import traceback
             traceback.print_exc()
 
@@ -566,10 +836,14 @@ def create_app(config_class=Config):
     app.cli.add_command(process_articles_command)
     app.cli.add_command(generate_voiced_summary_command)
     app.cli.add_command(generate_voice_response_command)
+    app.cli.add_command(process_script_command)
+    app.cli.add_command(record_edit_command)
+    app.cli.add_command(style_insights_command)
     app.cli.add_command(generate_timeline_command)
     app.cli.add_command(source_images_command)
     app.cli.add_command(generate_raw_images_command)
     app.cli.add_command(stylize_images_command)
     app.cli.add_command(process_story_command)
+    app.cli.add_command(create_video_command)
 
     return app

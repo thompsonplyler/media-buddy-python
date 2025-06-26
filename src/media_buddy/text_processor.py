@@ -231,6 +231,20 @@ def generate_voiced_summary_from_article(article: NewsArticle, length: int) -> s
     response = model.generate_content(prompt)
     return response.text
 
+def generate_voiced_summary_from_content(content: str, length: int) -> str:
+    """
+    Generates a voiced summary directly from article content, bypassing the base summary step.
+    This is the preferred method for our new Google News + Playwright pipeline.
+    
+    Args:
+        content: The full article content to process
+        length: Target word count for the voiced summary
+        
+    Returns:
+        A voiced summary in Thompson's style
+    """
+    return generate_voiced_summary_from_raw_content(content, length)
+
 def generate_voiced_summary_from_raw_content(raw_content: str, length: int) -> str:
     """
     Generates Thompson's response to a full news article, as if he read the entire piece.
@@ -312,31 +326,31 @@ def generate_voiced_response_from_articles(articles: list, topic: str, length: i
     writing_style = get_writing_style_examples()
 
     prompt = f"""
-    You are Thompson, and you've just finished reading {len(articles)} different news articles about "{topic}". Your task is to write your synthesized response that draws insights from all the articles, as if you're sharing your thoughts about this topic after reading multiple perspectives.
+    You are Thompson, and you're about to record a 60-second spoken summary about "{topic}". This is a script to be read aloud, so it should sound natural and conversational when spoken.
 
     **CRITICAL INSTRUCTIONS:**
-    - **DO NOT** simply summarize each article individually
-    - **DO** synthesize insights across all articles - find patterns, contradictions, broader implications
-    - **DO** respond as Thompson would - with your own perspective, analysis, and commentary on the topic
-    - **DO** capture Thompson's unique writing style from the style guide
-    - **DO** feel free to agree/disagree with points made, add context, or provide your own insights
-    - **DO** reference multiple sources when they support or contradict each other
+    - **DO NOT** mention articles, sources, or reading anything - speak about the situation directly
+    - **DO** synthesize all the key information into one cohesive narrative about the situation
+    - **DO** write in Thompson's distinctive voice and style from the style guide
+    - **DO** make it sound like Thompson is speaking directly to his audience about what's happening
+    - **DO** keep it to approximately 150-180 words (60 seconds of speaking)
+    - **DO NOT** use phrases like "according to reports" or "articles suggest" - speak as if you know what's happening
     - **DO NOT** copy specific unrelated proper nouns from your style guide
 
-    This should feel like Thompson read multiple articles on "{topic}" and is now sharing his comprehensive thoughts about the topic, drawing from what he learned across all sources.
+    This should sound like Thompson giving his take on the current situation regarding "{topic}" - informed, conversational, and in his unique voice.
 
     **Thompson's Writing Style Guide:**
     ---
     {writing_style}
     ---
 
-    **Articles Thompson Just Read About "{topic}":**
+    **Current Situation Information:**
     ---
     {combined_content}
     ---
 
     **Your Task:**
-    Write Thompson's synthesized response to these {len(articles)} articles about "{topic}" in approximately {length} words. This should be his commentary and analysis that draws from multiple sources, not individual article summaries. Write as if Thompson is speaking directly to his audience about what he learned from reading all these articles.
+    Write Thompson's 60-second spoken script about the "{topic}" situation in approximately 150-180 words. This should be his direct commentary on what's happening, written to be read aloud naturally. Focus on the key developments and Thompson's perspective on the situation.
     """
 
     response = model.generate_content(prompt)
