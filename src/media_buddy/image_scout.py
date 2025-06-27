@@ -37,7 +37,7 @@ def source_image_for_scene(scene_description: str) -> dict:
     # We'll simulate a 30% chance of "finding" a suitable image online.
     if random.random() < 0.3:
         logging.info("Simulating a successful image search.")
-        return {"found_image_url": f"https://picsum.photos/seed/{random.randint(1, 1000)}/800/600"}
+        return {"found_image_url": f"https://picsum.photos/seed/{random.randint(1, 1000)}/400/600"}
     else:
         logging.info("Image search failed or below threshold. Generating a rich prompt.")
         prompt = generate_rich_image_prompt(scene_description)
@@ -60,7 +60,7 @@ def generate_raw_image(prompt: str, article_id: int, scene_number: int, is_user_
     model_name = "black-forest-labs/flux-dev"
     input_payload = {
         "prompt": final_prompt,
-        "aspect_ratio": "9:16",
+        "aspect_ratio": "2:3",
         "guidance": 3.5
     }
 
