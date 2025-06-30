@@ -100,104 +100,191 @@ flask init-db
 
 ## 📖 Usage
 
-### End-to-End Pipeline (NEW!)
+### Collaborative Writing Workflow (NEW!)
 
-The complete pipeline now runs with a single command using our new modular architecture:
+Media Buddy now features a sophisticated collaborative writing workflow that combines human perspective with AI enhancement:
 
 ```powershell
-# Set Google News service and run complete pipeline
-$env:ARTICLE_SERVICE = "googlenews"
-flask process-story --query "artificial intelligence breakthroughs" --theme "retro_anime_80s" --length 125
+# 1. Discover and create articles with full content (not snippets!)
+flask discover-story "artificial intelligence breakthroughs"
+flask create-article --query "artificial intelligence breakthroughs" --auto
+
+# 2. Initialize workflow state management
+flask workflow-init --article-id 1
+
+# 3. Add your unique perspective to the story
+flask contribute-take --article-id 1
+
+# 4. AI enhances your contribution while preserving your voice
+flask enhance-writing --article-id 1 --length 200
+
+# 5. Generate visual timeline from enhanced content
+flask generate-enhanced-timeline --article-id 1
+
+# 6. Create images and assemble final assets
+flask process-visuals --article-id 1 --theme retro_anime_80s
+flask assemble-final --article-id 1
 ```
 
-This command:
+**Key Benefits:**
 
-1. **Fetches** full articles from Google News (not snippets!)
-2. **Generates** voiced summary directly from full content (bypasses problematic BART step)
-3. **Creates** visual timeline with scene descriptions
-4. **Sources** and generates raw images for each scene
-5. **Stylizes** images with chosen theme
-6. **Outputs** final script and images to `instance/output/{article_id}/`
+- **Human-AI Collaboration**: Your unique perspective + AI enhancement
+- **Full Content**: 4,000-8,900 character articles via Archive.is fallback
+- **Workflow State Management**: Persistent state across CLI commands
+- **Modular Design**: Each phase can be run independently
 
-### Individual Pipeline Commands
+### 🚀 Streamlined Turnkey Workflow (NEWEST!)
 
-For step-by-step processing or debugging:
+For maximum efficiency, use the new 5-command turnkey workflow that takes you from story idea to final video:
 
 ```powershell
-# 1. Fetch news articles (now gets full content, not snippets)
+# 1. Create story from your preliminary text + 3 reliable news articles
+flask story-create --story-file "my_story.txt" --news-query "AI breakthroughs" --title "My AI Analysis"
+
+# 2. Generate Thompson's enhanced script with timeline and duration estimates
+flask script-generate --article-id 123 --length 200
+
+# 3. Review complete timeline and generate styled images (shows full text + visuals)
+flask timeline-approve --article-id 123 --theme retro_anime_80s
+
+# 4. Final video composition (video on TOP, images on BOTTOM)
+flask video-compose --article-id 123 --video-file "my_recording.mov"
+
+# 5. Track progress and manage workflows
+flask story-status --article-id 123
+```
+
+**Key Features:**
+
+- **Complete Visibility**: Step 3 shows the entire timeline with text content and visual descriptions
+- **Duration Analysis**: Automatic timing estimates (150 words/minute) for precise video planning
+- **Video Layout Control**: Recorded video prominently displayed on top with slideshow images below
+- **Story-First Approach**: Your preliminary story drives the narrative, enhanced with relevant news context
+- **Turnkey Process**: Each command tells you exactly what to run next
+
+**⚠️ Voice Generation Setup**: Since `private/writing_style_samples/` is gitignored, you must:
+
+1. **Create the directory**: `mkdir -p private/writing_style_samples`
+2. **Add your writing samples**: Save personal essays, blog posts, and writing samples as `.md` files
+3. **Aim for 50KB+ total content**: More samples = better voice adoption
+4. **Include diverse content**: Political opinions, reviews, personal reflections for authentic voice capture
+
+### Archive.is Enhancement (Breakthrough!)
+
+For maximum content quality, use the Archive.is enhancement pipeline:
+
+```powershell
+# Automatically enhance snippet articles with full content from Archive.is
+flask archive-enhance "breaking news topic" --count 3 --verbose
+```
+
+This command discovers articles, identifies snippets, and uses Archive.is/Wayback Machine to retrieve full content, often increasing article length by 20-40x.
+
+### Legacy Pipeline Commands
+
+For traditional automated processing:
+
+```powershell
+# Complete automated pipeline (bypasses collaborative workflow)
+flask process-story --query "topic" --theme "retro_anime_80s" --length 200
+
+# Individual legacy commands
 flask fetch-news "artificial intelligence"
-
-# 2. Generate summaries and vector embeddings
 flask process-articles
-
-# 3. Convert summaries to your personal voice
 flask generate-voiced-summary --article-id 1 --length 125
-
-# 4. Create visual timeline from voiced content
 flask generate-timeline --article-id 1
-
-# 5. Generate images for each scene
-flask source-images --article-id 1
-flask generate-raw-images --article-id 1
-flask stylize-images --article-id 1 --theme retro_anime_80s
 ```
 
-### Voice Processing Examples
+### Development and Testing Commands
 
 ```powershell
-# Test voice adoption on custom text
-flask generate-voice --text "Your original text here" --length 125
+# Test image generation with custom prompts
+flask test-image --prompt "A futuristic cityscape at sunset"
 
-# Generate embeddings for similarity search
-flask generate-embedding --text "Some text to embed"
+# Test Archive.is content extraction
+flask test-archive --verbose
 
-# Process existing database records
-flask voice-process-db --record-id 1 --length 125
+# Check workflow status
+flask workflow-status --article-id 1
+flask workflow-status --list-all
+
+# Video generation (requires FFmpeg)
+flask create-video --article-id 1
+flask compose-video --input-dir "instance/output/1" --width 1080 --height 1920
 ```
 
 ## 🧠 How It Works
 
-### The Complete Pipeline Architecture
+### Collaborative Writing Workflow Architecture
 
-**NEW**: The pipeline now uses a modular service architecture that eliminates the problematic "snippet limitation" entirely:
+Media Buddy implements a sophisticated 6-phase collaborative workflow that combines human insight with AI enhancement:
 
-1. **Google News RSS Discovery**: Finds articles from 100+ quality sources with reliability rankings
-2. **Playwright Content Extraction**: Gets full 4,000-8,900 character articles (20-40x more than snippets)
-3. **Direct Voice Generation**: Bypasses BART summarization, goes straight from full content to Thompson's voice
-4. **Timeline Creation**: Converts voiced content to visual scene descriptions
-5. **Image Generation**: Uses Replicate API with FLUX models and theme stylization
-6. **Asset Assembly**: Outputs script + stylized images ready for multimedia use
+**Phase 1: Discovery**
+
+- **Google News RSS**: Discovers articles from 100+ quality sources
+- **Archive.is Integration**: Retrieves full content when initial sources provide only snippets
+- **Content Validation**: Ensures substantial article content (4,000-8,900 characters)
+
+**Phase 2: User Contribution**
+
+- **Human Perspective**: User adds their unique take, analysis, or opinion
+- **Flexible Input**: Write directly or load from files
+- **Content Templates**: Guided prompts help structure contributions
+
+**Phase 3: AI Enhancement**
+
+- **Voice Preservation**: AI enhances content while maintaining user's authentic voice
+- **Style Context**: Uses personal writing samples for consistency
+- **Length Control**: Configurable output length for different media formats
+
+**Phase 4: Timeline Generation**
+
+- **Scene Breakdown**: Converts enhanced content into visual scene descriptions
+- **Narrative Structure**: Maintains story flow and pacing
+- **Image Optimization**: Descriptions optimized for text-to-image generation
+
+**Phase 5: Visual Processing**
+
+- **Multi-stage Image Generation**: Raw generation → theme stylization
+- **15+ Visual Themes**: From cinematic to retro anime aesthetics
+- **Scene Intelligence**: Differentiates user-focused vs. general scenes
+
+**Phase 6: Final Assembly**
+
+- **Asset Organization**: Structured output for multimedia production
+- **Metadata Tracking**: Complete workflow history and statistics
+- **Export Ready**: Optimized for video composition and social media
 
 ### The Content Acquisition Breakthrough
 
-Previous systems were limited to 214-character snippets from APIs. Media Buddy now uses:
+Traditional systems were limited to 214-character snippets. Media Buddy's multi-tier approach provides:
 
-1. **Google News RSS**: Discovers articles from diverse, high-quality sources
-2. **Intelligent Source Filtering**: Prioritizes reliable news sources with quality rankings
-3. **Playwright Web Scraping**: Extracts full article content (4,000-8,900 characters)
-4. **Bot Detection Handling**: Gracefully handles CAPTCHA and anti-bot measures with 60% success rate
+1. **Primary Discovery**: Google News RSS with source quality rankings
+2. **Archive.is Fallback**: Retrieves full content from archived versions
+3. **Wayback Machine**: Secondary fallback for maximum content coverage
+4. **Bot Detection Resilience**: Graceful handling of anti-scraping measures
 
-This provides 20-40x more content than snippet-based systems while maintaining source diversity.
+**Result**: 20-40x more content than snippet-based systems with 60%+ success rate.
 
-### The Voice Adoption System
+### Workflow State Management
 
-Most AI voice systems fail because they either lack sufficient training data or mix style with content. Media Buddy solves this with:
+Each article progresses through tracked phases with persistent state:
 
-1. **Massive Training Data**: Your personal writing samples (50KB+ recommended)
-2. **Smart Prompt Engineering**: Separates STYLE from CONTENT
-3. **Style Learning**: Captures and learns from your edits to improve consistency
-4. **Direct Processing**: No intermediate summarization step to lose nuance
-
-This prevents AI from injecting irrelevant personal details while capturing your authentic voice.
+- **Database-Driven**: State restored from article data across CLI commands
+- **Phase Validation**: Prevents out-of-order execution
+- **Recovery Support**: Workflows can be resumed from any point
+- **Progress Tracking**: Clear visibility into completion status
 
 ### The Technical Stack
 
-- **Content Acquisition**: Google News RSS + Playwright web scraping
-- **Voice Processing**: Gemini API with sophisticated prompts
-- **Embeddings**: sentence-transformers with `all-MiniLM-L6-v2` model
-- **Vector Storage**: PostgreSQL with pgvector extension (384 dimensions)
-- **Image Generation**: Replicate API with FLUX models
-- **Performance**: Lazy loading, caching, GPU acceleration where available
+- **Content Acquisition**: Google News RSS + Archive.is + Wayback Machine via Playwright
+- **Workflow Orchestration**: PipelineOrchestrator with database-driven state management
+- **AI Enhancement**: Gemini API with collaborative writing prompts
+- **Embeddings**: sentence-transformers with `all-MiniLM-L6-v2` model (384 dimensions)
+- **Vector Storage**: PostgreSQL with pgvector extension for semantic search
+- **Image Generation**: Replicate API with FLUX models and theme stylization
+- **Video Composition**: FFmpeg integration for multimedia assembly
+- **Performance**: GPU acceleration, lazy loading, modular service architecture
 
 ## 🔍 Key Features
 

@@ -147,23 +147,30 @@ class VoiceProcessor:
 
     def generate_timeline(self, text: str) -> List[Dict]:
         """
-        Parses a block of text and divides it into a sequence of visually descriptive
-        prompts suitable for a text-to-image model.
+        Parses a block of text and divides it into a sequence of scenes for multimedia production.
+        Each scene contains both the text content (for voiceover timing) and visual description (for image generation).
 
         Args:
             text: The voiced text to process into scenes.
 
         Returns:
-            A list of scene dictionaries with visual descriptions.
+            A list of scene dictionaries with text content and visual descriptions.
         """
         try:
             prompt = f"""
-            You are an expert AI image prompt engineer. Your task is to read the following text and break it down into a sequence of visually descriptive scenes that can be used as prompts for a text-to-image generator like Midjourney or FLUX.
+            You are an expert AI content analyzer. Your task is to read the following text and break it down into a sequence of scenes for multimedia production. Each scene needs both the actual text content (for voiceover timing) and a visual description (for image generation).
 
-            Your output MUST be a valid JSON array of objects. Do not include any text, markdown, or explanations outside of the JSON block. Each object in the array should represent one scene and have three keys:
+            Your output MUST be a valid JSON array of objects. Do not include any text, markdown, or explanations outside of the JSON block. Each object in the array should represent one scene and have four keys:
             1. "scene": An integer representing the scene number (starting from 1).
-            2. "description": A visually rich, concrete description of the scene.
-            3. "is_user_scene": A boolean value (`true` or `false`). Set this to `true` if the scene is clearly describing the author of the text (using "I", "me", "my"). Otherwise, set it to `false`.
+            2. "text": The actual text/script content from the original text that corresponds to this scene. This should be the exact words that will be spoken during this visual scene.
+            3. "description": A visually rich, concrete description of the scene for image generation.
+            4. "is_user_scene": A boolean value (`true` or `false`). Set this to `true` if the scene is clearly describing the author of the text (using "I", "me", "my"). Otherwise, set it to `false`.
+
+            **CRITICAL RULES FOR TEXT SEGMENTATION:**
+            - **COMPLETE THOUGHTS:** Each scene should contain complete sentences or thoughts, not fragments.
+            - **NATURAL BREAKS:** Break at logical narrative points (topic changes, new subjects, transitions).
+            - **SPEAKING PACE:** Aim for 15-25 words per scene (roughly 3-5 seconds of speech at normal pace).
+            - **PRESERVE ORIGINAL:** Use the exact words from the original text - don't paraphrase or summarize.
 
             **CRITICAL RULES FOR DESCRIPTIONS:**
             - **BE VISUAL:** Describe what can be SEEN. Avoid abstract concepts, emotions, or intentions. Instead of "She was sad," write "A single tear rolls down her cheek." Instead of "He was angry," write "His knuckles are white as he clenches his fist."

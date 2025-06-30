@@ -4,6 +4,7 @@ from typing import Dict, Type
 from .article_service import ArticleService
 from .newsapi_service import NewsAPIService
 from .googlenews_service import GoogleNewsService
+from .archive_service import ArchiveService
 
 class ArticleServiceFactory:
     """Factory for creating and managing article services."""
@@ -11,6 +12,7 @@ class ArticleServiceFactory:
     _services: Dict[str, Type[ArticleService]] = {
         'newsapi': NewsAPIService,
         'googlenews': GoogleNewsService,
+        'archive': ArchiveService,
     }
     
     @classmethod

@@ -97,16 +97,16 @@ def generate_embedding(text: str, model_name: str = "all-MiniLM-L6-v2") -> list[
 
 def generate_timeline(text: str) -> list[dict]:
     """
-    Parses a block of text and divides it into a sequence of visually descriptive
-    prompts suitable for a text-to-image model.
+    Parses a block of text and divides it into a sequence of scenes for multimedia production.
+    Each scene contains both the text content (for voiceover timing) and visual description (for image generation).
 
     Args:
-        text (str): The voiced summary to process.
+        text (str): The voiced summary or enhanced content to process.
 
     Returns:
-        list[dict]: A list of scene dictionaries formatted as image prompts, e.g.,
-                    [{"scene": 1, "description": "A quiet town at dusk, cinematic lighting."},
-                     {"scene": 2, "description": "A mysterious figure in a long coat appears under a streetlamp."}]
+        list[dict]: A list of scene dictionaries with text and visual information, e.g.,
+                    [{"scene": 1, "text": "The CEO felt the pressure.", "description": "A man at a desk with his head in his hands.", "is_user_scene": false},
+                     {"scene": 2, "text": "I decided to take action.", "description": "A person walking confidently down a hallway.", "is_user_scene": true}]
     """
     import json
 
@@ -115,12 +115,19 @@ def generate_timeline(text: str) -> list[dict]:
         model = genai.GenerativeModel('gemini-1.5-pro-latest')
 
         prompt = f"""
-        You are an expert AI image prompt engineer. Your task is to read the following text and break it down into a sequence of visually descriptive scenes that can be used as prompts for a text-to-image generator like Midjourney or FLUX.
+        You are an expert AI content analyzer. Your task is to read the following text and break it down into a sequence of scenes for multimedia production. Each scene needs both the actual text content (for voiceover timing) and a visual description (for image generation).
 
-        Your output MUST be a valid JSON array of objects. Do not include any text, markdown, or explanations outside of the JSON block. Each object in the array should represent one scene and have three keys:
+        Your output MUST be a valid JSON array of objects. Do not include any text, markdown, or explanations outside of the JSON block. Each object in the array should represent one scene and have four keys:
         1. "scene": An integer representing the scene number (starting from 1).
-        2. "description": A visually rich, concrete description of the scene.
-        3. "is_user_scene": A boolean value (`true` or `false`). Set this to `true` if the scene is clearly describing the author of the text (using "I", "me", "my"). Otherwise, set it to `false`.
+        2. "text": The actual text/script content from the original text that corresponds to this scene. This should be the exact words that will be spoken during this visual scene.
+        3. "description": A visually rich, concrete description of the scene for image generation.
+        4. "is_user_scene": A boolean value (`true` or `false`). Set this to `true` if the scene is clearly describing the author of the text (using "I", "me", "my"). Otherwise, set it to `false`.
+
+        **CRITICAL RULES FOR TEXT SEGMENTATION:**
+        - **COMPLETE THOUGHTS:** Each scene should contain complete sentences or thoughts, not fragments.
+        - **NATURAL BREAKS:** Break at logical narrative points (topic changes, new subjects, transitions).
+        - **SPEAKING PACE:** Aim for 15-25 words per scene (roughly 3-5 seconds of speech at normal pace).
+        - **PRESERVE ORIGINAL:** Use the exact words from the original text - don't paraphrase or summarize.
 
         **CRITICAL RULES FOR DESCRIPTIONS:**
         - **BE VISUAL:** Describe what can be SEEN. Avoid abstract concepts, emotions, or intentions. Instead of "She was sad," write "A single tear rolls down her cheek." Instead of "He was angry," write "His knuckles are white as he clenches his fist."
@@ -133,9 +140,9 @@ def generate_timeline(text: str) -> list[dict]:
 
         CORRECT OUTPUT:
         [
-            {{"scene": 1, "description": "A CEO in a sharp business suit sits at a long boardroom table, head in his hands, under the stern gaze of portraits on the wall.", "is_user_scene": false}},
-            {{"scene": 2, "description": "A line graph projected on a screen shows a declining trend line next to a competitor's rising line.", "is_user_scene": false}},
-            {{"scene": 3, "description": "A man with messy brown hair walks alone on a rain-slicked city street at night, reflected in the puddles on the pavement.", "is_user_scene": true}}
+            {{"scene": 1, "text": "The CEO felt the pressure.", "description": "A middle-aged man in a business suit sits at a large mahogany desk, his hands pressed against his temples.", "is_user_scene": false}},
+            {{"scene": 2, "text": "The board was unhappy with the slow progress on the new AI project, which they felt was falling behind competitors.", "description": "A line graph projected on a screen shows a declining trend line next to a competitor's rising line.", "is_user_scene": false}},
+            {{"scene": 3, "text": "I decided to take a walk to clear my head.", "description": "A man with messy brown hair walks alone on a rain-slicked city street at night, reflected in the puddles on the pavement.", "is_user_scene": true}}
         ]
 
         Now, please process the following text:
@@ -351,6 +358,67 @@ def generate_voiced_response_from_articles(articles: list, topic: str, length: i
 
     **Your Task:**
     Write Thompson's 60-second spoken script about the "{topic}" situation in approximately 150-180 words. This should be his direct commentary on what's happening, written to be read aloud naturally. Focus on the key developments and Thompson's perspective on the situation.
+    """
+
+    response = model.generate_content(prompt)
+    return response.text
+
+def generate_voiced_story_from_user_and_news(user_story: str, news_content: str, length: int) -> str:
+    """
+    Generates Thompson's enhanced story by combining user's preliminary story with news articles.
+    This is designed for the streamlined story workflow.
+
+    Args:
+        user_story: The user's preliminary story/script
+        news_content: Combined content from news articles
+        length: Target word count for the enhanced story
+
+    Returns:
+        Thompson's enhanced version combining both sources
+    """
+    if not user_story or len(user_story.strip()) < 50:
+        raise ValueError("User story must be substantial for enhancement.")
+    
+    if not news_content or len(news_content.strip()) < 100:
+        raise ValueError("News content must be substantial for enhancement.")
+
+    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+
+    writing_style = get_writing_style_examples()
+
+    prompt = f"""
+    You are Thompson, and you're creating an enhanced script by combining your user's preliminary story with relevant news information. Your task is to weave these elements together into a cohesive narrative in your distinctive voice.
+
+    **CRITICAL INSTRUCTIONS:**
+    - **DO** use the user's story as the foundation and primary narrative thread
+    - **DO** enhance it with relevant details, context, and insights from the news sources  
+    - **DO** write in Thompson's distinctive voice and style from the style guide
+    - **DO** create a seamless narrative that sounds like Thompson telling a complete story
+    - **DO** maintain the user's core ideas while adding Thompson's perspective and analysis
+    - **DO NOT** simply concatenate the sources - blend them thoughtfully
+    - **DO NOT** copy specific unrelated proper nouns from your style guide
+    - **DO** make it feel like a cohesive script to be read aloud
+
+    This should sound like Thompson took the user's preliminary ideas and crafted them into a complete, enhanced narrative with supporting context from current events.
+
+    **Thompson's Writing Style Guide:**
+    ---
+    {writing_style}
+    ---
+
+    **User's Preliminary Story:**
+    ---
+    {user_story}
+    ---
+
+    **Supporting News Context:**
+    ---
+    {news_content}
+    ---
+
+    **Your Task:**
+    Create Thompson's enhanced script in approximately {length} words by thoughtfully combining the user's story with relevant news context. This should be a cohesive narrative that builds on the user's foundation while adding Thompson's distinctive voice and insights.
     """
 
     response = model.generate_content(prompt)

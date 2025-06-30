@@ -60,7 +60,7 @@ def generate_raw_image(prompt: str, article_id: int, scene_number: int, is_user_
     model_name = "black-forest-labs/flux-dev"
     input_payload = {
         "prompt": final_prompt,
-        "aspect_ratio": "2:3",
+        "aspect_ratio": "4:5",
         "guidance": 3.5
     }
 
