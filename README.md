@@ -37,7 +37,7 @@ The core innovation is a 7-step pipeline that transforms raw news into personali
 
 ### Development Environment
 
-**IMPORTANT**: This project is developed and tested on **Windows PowerShell**. All command examples use PowerShell syntax (`$env:VARIABLE = "value"`). Thompson (the primary user) prefers to execute all terminal commands himself rather than having AI assistants run them.
+**IMPORTANT**: This project is developed and tested on **Windows PowerShell**. All command examples use PowerShell syntax (`$env:VARIABLE = "value"`).
 
 ## 🚀 Quick Start
 
