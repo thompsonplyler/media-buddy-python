@@ -110,11 +110,8 @@ def create_app(config_class=Config):
             article = NewsArticle(
                 title=title,
                 url=f"story://created_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                content=combined_news,  # Store news articles in content
+                raw_content=combined_news,  # Store news articles in raw_content
                 user_contribution=user_story,  # Store user story in contribution
-                source="story-workflow",
-                published_at=datetime.datetime.utcnow(),
-                created_at=datetime.datetime.utcnow(),
                 workflow_phase=WorkflowPhase.AI_ENHANCEMENT.value  # Skip to enhancement
             )
             
@@ -167,7 +164,7 @@ def create_app(config_class=Config):
             print("🤖 Generating AI-enhanced script...")
             enhanced_content = generate_voiced_story_from_user_and_news(
                 user_story=article.user_contribution,
-                news_content=article.content,
+                news_content=article.raw_content,
                 length=length
             )
             
@@ -244,8 +241,9 @@ def create_app(config_class=Config):
     def timeline_approve_command(article_id, theme, preview_only):
         """Step 3: Approve timeline and generate images."""
         from .services.pipeline_orchestrator import orchestrator, WorkflowPhase
-        from .image_scout import generate_images_from_timeline
-        from .themes import apply_flux_theme
+        from .image_scout import generate_raw_image, apply_style_to_image
+        from .themes import FLUX_THEMES
+        from sqlalchemy.orm.attributes import flag_modified
         import json
         
         try:
@@ -295,25 +293,58 @@ def create_app(config_class=Config):
             print("🎨 Generating images...")
             print("-" * 60)
             
-            # Generate raw images
-            raw_image_count = generate_images_from_timeline(article_id, timeline)
-            print(f"✅ Generated {raw_image_count} raw images")
+            # Generate raw images using existing modular interface
+            raw_image_count = 0
+            style_prompt = FLUX_THEMES.get(theme)
             
-            # Apply theme styling
-            styled_count = 0
-            for scene in timeline:
-                scene_num = scene['scene']
-                image_path = f"instance/images/{article_id}/scene_{scene_num}.png"
+            # Generate raw images for scenes that need them
+            scenes_to_process = [s for s in timeline if not s.get('raw_image_path')]
+            for scene in scenes_to_process:
+                scene_number = scene['scene']
+                description = scene.get('description', '')
                 
-                if os.path.exists(image_path):
-                    styled_path = apply_flux_theme(
-                        image_path, 
-                        theme, 
+                if description:
+                    raw_path = generate_raw_image(
+                        prompt=description,
+                        article_id=article_id,
+                        scene_number=scene_number,
                         is_user_scene=scene.get('is_user_scene', False)
                     )
+                    
+                    if raw_path:
+                        scene['raw_image_path'] = raw_path
+                        raw_image_count += 1
+                        print(f"✅ Generated raw image for scene {scene_number}")
+                    else:
+                        print(f"❌ Failed to generate raw image for scene {scene_number}")
+            
+            print(f"✅ Generated {raw_image_count} raw images")
+            
+            # Apply theme styling using existing modular interface
+            styled_count = 0
+            scenes_to_stylize = [s for s in timeline if s.get('raw_image_path') and not s.get('stylized_image_path')]
+            
+            for scene in scenes_to_stylize:
+                scene_number = scene['scene']
+                raw_image_path = scene.get('raw_image_path')
+                
+                if raw_image_path and os.path.exists(raw_image_path):
+                    styled_path = apply_style_to_image(
+                        image_path_or_url=raw_image_path,
+                        style_prompt=style_prompt,
+                        article_id=article_id,
+                        scene_number=scene_number
+                    )
+                    
                     if styled_path:
                         scene['stylized_image_path'] = styled_path
                         styled_count += 1
+                        print(f"✅ Styled image for scene {scene_number}")
+                    else:
+                        print(f"❌ Failed to style image for scene {scene_number}")
+            
+            # Mark timeline as modified for SQLAlchemy
+            flag_modified(article, "timeline_json")
             
             # Update timeline with image paths
             article.timeline_json = timeline
@@ -324,9 +355,43 @@ def create_app(config_class=Config):
             orchestrator.advance_workflow(article_id, WorkflowPhase.IMAGE_PROCESSING)
             orchestrator.advance_workflow(article_id, WorkflowPhase.FINAL_ASSEMBLY)
             
+            # Save script text to file alongside images
+            text_output_dir = f"instance/text/{article_id}"
+            os.makedirs(text_output_dir, exist_ok=True)
+            
+            # Create full script file
+            script_path = os.path.join(text_output_dir, 'full_script.txt')
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(f"# {article.title}\n")
+                f.write(f"# Generated: {article.url.replace('story://created_', '').replace('_', ' ')}\n")
+                f.write(f"# Total Duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)\n\n")
+                f.write("="*80 + "\n")
+                f.write("FULL SCRIPT\n")
+                f.write("="*80 + "\n\n")
+                f.write(article.enhanced_content)
+            
+            # Create scene-by-scene script file  
+            scene_script_path = os.path.join(text_output_dir, 'scene_by_scene.txt')
+            with open(scene_script_path, 'w', encoding='utf-8') as f:
+                f.write(f"# {article.title} - Scene by Scene\n")
+                f.write(f"# Generated: {article.url.replace('story://created_', '').replace('_', ' ')}\n")
+                f.write(f"# Total Duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)\n\n")
+                
+                for scene in timeline:
+                    f.write(f"{'='*60}\n")
+                    f.write(f"SCENE {scene['scene']} ({scene.get('duration_seconds', 0)}s)\n")
+                    f.write(f"{'='*60}\n")
+                    f.write(f"TEXT TO SPEAK:\n{scene['text']}\n\n")
+                    f.write(f"VISUAL DESCRIPTION:\n{scene['description']}\n\n")
+                    f.write(f"USER SCENE: {'Yes' if scene.get('is_user_scene') else 'No'}\n\n")
+            
             print(f"✅ Images generated and styled!")
-            print(f"🎨 Styled images: {styled_count}/{len(timeline)}")
+            print(f"🎨 Raw images: {raw_image_count}")
+            print(f"🎭 Styled images: {styled_count}")
             print(f"📁 Images saved to: instance/images/{article_id}/")
+            print(f"📄 Script files saved to: instance/text/{article_id}/")
+            print(f"   📝 Full script: {script_path}")
+            print(f"   🎬 Scene breakdown: {scene_script_path}")
             
             print("\n🎯 NEXT STEP:")
             print(f"   flask video-compose --article-id {article_id} --video-file \"path/to/your/video.mov\"")
@@ -430,7 +495,7 @@ def create_app(config_class=Config):
         """Show status of story workflows."""
         try:
             if list_all:
-                stories = NewsArticle.query.filter_by(source='story-workflow').all()
+                stories = NewsArticle.query.filter(NewsArticle.url.like('story://%')).all()
                 if not stories:
                     print("📭 No story workflows found.")
                     return
@@ -444,7 +509,7 @@ def create_app(config_class=Config):
                     print(f"   📄 User story: {len(story.user_contribution or '') if story.user_contribution else 0} chars")
                     print(f"   📊 Enhanced: {len(story.enhanced_content or '') if story.enhanced_content else 0} chars")
                     print(f"   🎬 Timeline: {len(story.timeline_json) if story.timeline_json else 0} scenes")
-                    print(f"   📅 Created: {story.created_at}")
+                    print(f"   📅 Created: {story.url.replace('story://created_', '').replace('_', ' ')}")
                     print()
             
             elif article_id:
@@ -453,7 +518,7 @@ def create_app(config_class=Config):
                     print(f"❌ Article {article_id} not found.")
                     return
                 
-                if article.source != 'story-workflow':
+                if not article.url.startswith('story://'):
                     print(f"❌ Article {article_id} is not a story workflow.")
                     return
                 
@@ -467,7 +532,7 @@ def create_app(config_class=Config):
                 print(f"📊 Enhanced Content: {len(article.enhanced_content or '')} characters")
                 print(f"🎬 Timeline Scenes: {len(timeline)}")
                 print(f"⏱️  Estimated Duration: {total_duration:.1f}s ({total_duration/60:.1f} min)")
-                print(f"📅 Created: {article.created_at}")
+                print(f"📅 Created: {article.url.replace('story://created_', '').replace('_', ' ')}")
                 
                 # Show next step
                 phase = article.workflow_phase
@@ -2343,6 +2408,78 @@ def create_app(config_class=Config):
             import traceback
             traceback.print_exc()
 
+    @click.command(name='voice-respond')
+    @click.option('--query', required=True, type=str, help='The question or prompt to respond to.')
+    @click.option('--context-file', type=str, help='Optional path to file containing context content.')
+    @click.option('--length', default=250, type=int, help='Target word count for the response.')
+    @click.option('--output-file', type=str, help='Custom output filename (without extension).')
+    @with_appcontext
+    def voice_respond_command(query, context_file, length, output_file):
+        """Generate Thompson's response to a query, optionally using context content."""
+        from .text_processor import generate_voiced_response_to_query
+        import os
+        from datetime import datetime
+        
+        print(f"🤖 Generating Thompson's response to: '{query}'")
+        
+        context_content = None
+        if context_file:
+            if not os.path.exists(context_file):
+                print(f"❌ Context file not found: {context_file}")
+                return
+            
+            print(f"📖 Loading context from: {context_file}")
+            with open(context_file, 'r', encoding='utf-8') as f:
+                context_content = f.read().strip()
+            
+            if not context_content:
+                print(f"⚠️  Context file is empty, proceeding without context")
+                context_content = None
+            else:
+                print(f"✅ Loaded {len(context_content)} characters of context")
+        
+        try:
+            # Generate Thompson's response
+            response = generate_voiced_response_to_query(query, context_content, length)
+            
+            # Create output directory
+            output_dir = os.path.join('private', 'writing_style_samples', 'output', 'enhanced_scripts')
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename
+            if output_file:
+                filename = f"{output_file}.txt"
+            else:
+                # Create filename from query and timestamp
+                safe_query = "".join(c for c in query[:30] if c.isalnum() or c in (' ', '-')).strip()
+                safe_query = safe_query.replace(' ', '-').lower()
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"response_{safe_query}_{timestamp}.txt"
+            
+            filepath = os.path.join(output_dir, filename)
+            
+            # Save the response
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(f"# Thompson's Response\n\n")
+                f.write(f"**Query:** {query}\n\n")
+                if context_content:
+                    f.write(f"**Context Used:** {os.path.basename(context_file) if context_file else 'None'}\n\n")
+                f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"**Word Count:** ~{len(response.split())} words\n\n")
+                f.write("---\n\n")
+                f.write(response)
+            
+            print(f"\n✅ Response generated and saved to: {filepath}")
+            print(f"📊 Word count: ~{len(response.split())} words")
+            print("\n--- THOMPSON'S RESPONSE ---")
+            print(response)
+            print("--- END RESPONSE ---")
+            
+        except Exception as e:
+            print(f"❌ Error generating voice response: {e}")
+            import traceback
+            traceback.print_exc()
+
     # Register streamlined workflow commands
     app.cli.add_command(story_create_command)
     app.cli.add_command(script_generate_command)
@@ -2380,5 +2517,6 @@ def create_app(config_class=Config):
     app.cli.add_command(create_video_command)
     app.cli.add_command(compose_video_command)
     app.cli.add_command(test_archive_command)
+    app.cli.add_command(voice_respond_command)
 
     return app

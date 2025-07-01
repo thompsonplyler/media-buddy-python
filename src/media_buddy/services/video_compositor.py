@@ -276,15 +276,16 @@ class VideoCompositor:
             start_time = i * duration_per_image
             end_time = (i + 1) * duration_per_image
             
-            # Scale image to fit in the bottom area (below the video)
+            # Scale image to fill the bottom area (below the video)
             available_height = target_height - scaled_video_height  # Space below the video
             image_input_index = i + 1  # Images start at input index 1 (0 is video)
             
-            # Scale image to fit width and available height, maintaining aspect ratio
-            filters.append(f"[{image_input_index}:v]scale='min({target_width},iw)':'min({available_height},ih)':force_original_aspect_ratio=decrease[img_{i}_scaled]")
+            # Scale image to fill the entire bottom area, crop if necessary
+            # This ensures no black borders by scaling to cover the full area
+            filters.append(f"[{image_input_index}:v]scale={target_width}:{available_height}:force_original_aspect_ratio=increase[img_{i}_scaled]")
             
-            # Center the scaled image horizontally and position it in the bottom area
-            filters.append(f"[img_{i}_scaled]pad={target_width}:{available_height}:({target_width}-iw)/2:(({available_height}-ih)/2)[img_{i}_positioned]")
+            # Crop to exact dimensions if image was scaled larger than needed
+            filters.append(f"[img_{i}_scaled]crop={target_width}:{available_height}[img_{i}_positioned]")
             
             # Create the image overlay with timing (position at bottom below video)
             if i == len(image_files) - 1:

@@ -36,7 +36,7 @@ class ArticleServiceFactory:
             ValueError: If service name is not registered or service creation fails
         """
         if not service_name:
-            service_name = os.environ.get('ARTICLE_SERVICE', 'newsapi')
+            service_name = os.environ.get('ARTICLE_SERVICE', 'googlenews')
         
         if service_name not in cls._services:
             available = ', '.join(cls._services.keys())

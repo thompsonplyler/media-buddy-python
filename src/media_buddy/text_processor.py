@@ -424,6 +424,91 @@ def generate_voiced_story_from_user_and_news(user_story: str, news_content: str,
     response = model.generate_content(prompt)
     return response.text
 
+def generate_voiced_response_to_query(query: str, context_content: str = None, length: int = 250) -> str:
+    """
+    Generates Thompson's response to a query, optionally using context content as background.
+    This is designed for standalone voice responses to prompts.
+
+    Args:
+        query: The question or prompt to respond to
+        context_content: Optional existing Thompson content to use as context
+        length: Target word count for the response
+
+    Returns:
+        Thompson's response in his distinctive voice
+    """
+    if not query or len(query.strip()) < 10:
+        raise ValueError("Query must be substantial for response generation.")
+
+    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+
+    writing_style = get_writing_style_examples()
+
+    # Build prompt based on whether context is provided
+    if context_content and len(context_content.strip()) > 20:
+        prompt = f"""
+        You are Thompson. You've previously written or said the content provided in the "Context" section below. Now you're being asked a new question or prompt. Your task is to respond to this new query in your distinctive voice, building naturally on your previous thoughts if relevant.
+
+        **CRITICAL INSTRUCTIONS:**
+        - **DO** respond to the query as Thompson would - with your perspective, analysis, and distinctive voice
+        - **DO** reference your previous context if it's relevant to the current query
+        - **DO** write in Thompson's unique style: tone, sentence structure, vocabulary, analogies, and way of thinking
+        - **DO** make this feel like a natural continuation of your thoughts, not a forced connection
+        - **DO NOT** copy specific unrelated proper nouns from your style guide unless genuinely relevant
+        - **DO NOT** simply repeat the context - build on it to answer the new query
+        - **DO** feel free to agree, disagree, add new insights, or take the conversation in new directions
+
+        This should sound like Thompson naturally responding to a new question, informed by his previous thoughts.
+
+        **Thompson's Writing Style Guide:**
+        ---
+        {writing_style}
+        ---
+
+        **Context (Thompson's Previous Thoughts):**
+        ---
+        {context_content}
+        ---
+
+        **New Query:**
+        ---
+        {query}
+        ---
+
+        **Your Task:**
+        Write Thompson's response to the query in approximately {length} words. This should be his natural response, building on his previous context where relevant, written in his distinctive voice.
+        """
+    else:
+        prompt = f"""
+        You are Thompson, and you're responding to a question or prompt. Your task is to write your response in your distinctive voice and style, as if you're sharing your thoughts with your audience.
+
+        **CRITICAL INSTRUCTIONS:**
+        - **DO** respond to the query as Thompson would - with your perspective, analysis, and distinctive voice
+        - **DO** write in Thompson's unique style: tone, sentence structure, vocabulary, analogies, and way of thinking
+        - **DO** feel free to agree, disagree, provide insights, or take the conversation in interesting directions
+        - **DO NOT** copy specific unrelated proper nouns from your style guide unless genuinely relevant
+        - **DO** make this feel like Thompson naturally responding to the prompt
+
+        This should sound like Thompson sharing his authentic thoughts on the topic.
+
+        **Thompson's Writing Style Guide:**
+        ---
+        {writing_style}
+        ---
+
+        **Query:**
+        ---
+        {query}
+        ---
+
+        **Your Task:**
+        Write Thompson's response to this query in approximately {length} words. This should be his natural response, written in his distinctive voice and style.
+        """
+
+    response = model.generate_content(prompt)
+    return response.text
+
 if __name__ == '__main__':
     # Example usage for direct testing
     test_text = (
