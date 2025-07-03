@@ -143,7 +143,7 @@
 
 - Reused existing `get_writing_style_examples()` infrastructure
 - Clean separation from workflow orchestration
-- File-based output in `private/writing_style_samples/output/enhanced_scripts/`
+- File-based output in `.private/writing_style_samples/output/enhanced_scripts/`
 
 **Key Pattern**: Console display errors (PSReadLine) are separate from Flask application functionality.
 

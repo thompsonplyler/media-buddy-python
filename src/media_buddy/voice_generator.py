@@ -8,13 +8,13 @@ def get_writing_style_samples():
     """
     # This path is relative to the project root.
     # It assumes the script is run from the project root.
-    path = "private/writing_style_samples/*.md"
+    path = ".private/writing_style_samples/*.md"
     
     # Using glob to find all text files in the directory
     sample_files = glob.glob(path)
     
     if not sample_files:
-        print("Warning: No writing style samples found in private/writing_style_samples/")
+        print("Warning: No writing style samples found in .private/writing_style_samples/")
         return ""
 
     # Read and concatenate the content of each file

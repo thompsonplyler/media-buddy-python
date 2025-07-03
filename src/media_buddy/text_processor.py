@@ -204,7 +204,7 @@ def get_writing_style_examples():
     """
     Reads all .md files from the writing style samples directory and concatenates them.
     """
-    samples_dir = os.path.join('private', 'writing_style_samples')
+    samples_dir = os.path.join('.private', 'writing_style_samples')
     
     if not os.path.isdir(samples_dir):
         raise FileNotFoundError(f"Writing style samples directory not found at: {samples_dir}")

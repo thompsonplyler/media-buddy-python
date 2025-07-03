@@ -40,10 +40,10 @@ class GoogleNewsService(ArticleService):
             'ABC News': 70, 'CBS News': 70, 'NBC News': 70,
             
             # Tier 4: Moderate reliability
-            'USA Today': 60, 'Time': 60, 'Newsweek': 60,
+            'USA Today': 60, 'Time': 60, 'Newsweek': 60, 'CBS Sports': 60, 'Sports Illustrated': 60, 'Yahoo Sports': 60,
             
             # Tier 5: Lower priority but not blocked
-            'Daily Mail': 40, 'New York Post': 40, 'Fox News': 30,
+            'Daily Mail': 40, 'New York Post': 40, 'Fox News': 30, 'Entertainment Weekly': 30,
             
             # Tier 0: Blocked sources
             'RT': 0, 'Sputnik': 0, 'Breitbart': 0

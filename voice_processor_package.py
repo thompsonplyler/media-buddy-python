@@ -20,7 +20,7 @@ class VoiceProcessor:
     """
     
     def __init__(self, 
-                 writing_samples_dir: str = "private/writing_style_samples",
+                 writing_samples_dir: str = ".private/writing_style_samples",
                  embedding_model: str = "all-MiniLM-L6-v2",
                  gemini_api_key: Optional[str] = None):
         """

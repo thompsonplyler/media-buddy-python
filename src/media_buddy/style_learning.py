@@ -16,7 +16,7 @@ class StyleLearningSystem:
     Learns from the user's editing patterns to improve future voice generation.
     """
     
-    def __init__(self, learning_dir: str = "private/style_learning"):
+    def __init__(self, learning_dir: str = ".private/style_learning"):
         self.learning_dir = Path(learning_dir)
         self.learning_dir.mkdir(parents=True, exist_ok=True)
         

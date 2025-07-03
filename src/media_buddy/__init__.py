@@ -1,6 +1,7 @@
 import sys
 import os
 import click
+from datetime import datetime
 from flask import Flask
 from flask.cli import with_appcontext
 from sqlalchemy import text
@@ -109,7 +110,7 @@ def create_app(config_class=Config):
             # Create database entry
             article = NewsArticle(
                 title=title,
-                url=f"story://created_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                url=f"story://created_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 raw_content=combined_news,  # Store news articles in raw_content
                 user_contribution=user_story,  # Store user story in contribution
                 workflow_phase=WorkflowPhase.AI_ENHANCEMENT.value  # Skip to enhancement
@@ -446,8 +447,9 @@ def create_app(config_class=Config):
     @click.option('--preview-only', is_flag=True, help='Show timeline without saving to database.')
     @click.option('--use-concepts', is_flag=True, help='Use concept-based timeline generation for better results.')
     @click.option('--theme', type=click.Choice(FLUX_THEMES.keys()), help='Optional theme for concept-based generation.')
+    @click.option('--force', is_flag=True, help='Force overwrite if timeline already exists for this file.')
     @with_appcontext
-    def generate_timeline_from_file_command(file_path, title, preview_only, use_concepts, theme):
+    def generate_timeline_from_file_command(file_path, title, preview_only, use_concepts, theme, force):
         """Generate timeline from any text file with optional concept-based analysis."""
         from .text_processor import generate_timeline_from_file, generate_concept_based_timeline
         import os
@@ -526,29 +528,58 @@ def create_app(config_class=Config):
                 if not title:
                     title = f"Timeline from {os.path.basename(file_path)}"
                 
-                # Create a pseudo-article entry for file-based timelines
-                pseudo_article = NewsArticle(
-                    title=title,
-                    url=f"file://{file_path}",
-                    raw_content="",
-                    enhanced_content=open(file_path, 'r', encoding='utf-8').read(),
-                    timeline_json=timeline,
-                    workflow_phase='timeline_generated'
-                )
+                # Check if an entry already exists for this file
+                base_url = f"file://{file_path}"
+                existing_article = NewsArticle.query.filter_by(url=base_url).first()
                 
-                db.session.add(pseudo_article)
-                db.session.commit()
-                
-                print(f"💾 Timeline saved to database as Article ID: {pseudo_article.id}")
-                print(f"🎯 NEXT STEPS:")
-                print(f"   # Standard approach:")
-                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name]")
-                print(f"   # Cost-effective approach:")
-                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name] --no-kontext")
-                print(f"   # Video composition:")
-                print(f"   flask video-compose --article-id {pseudo_article.id} --video-file [your_video.mp4]")
-                
-                return pseudo_article.id
+                if existing_article:
+                    if force:
+                        # Update existing article
+                        existing_article.title = title
+                        existing_article.enhanced_content = open(file_path, 'r', encoding='utf-8').read()
+                        existing_article.timeline_json = timeline
+                        existing_article.workflow_phase = 'timeline_generated'
+                        db.session.commit()
+                        
+                        print(f"🔄 Updated existing timeline in database as Article ID: {existing_article.id}")
+                        print(f"🎯 NEXT STEPS:")
+                        print(f"   # Standard approach:")
+                        print(f"   flask timeline-approve --article-id {existing_article.id} --theme [theme_name]")
+                        print(f"   # Cost-effective approach:")
+                        print(f"   flask timeline-approve --article-id {existing_article.id} --theme [theme_name] --no-kontext")
+                        print(f"   # Video composition:")
+                        print(f"   flask video-compose --article-id {existing_article.id} --video-file [your_video.mp4]")
+                        
+                        return existing_article.id
+                    else:
+                        print(f"❌ Timeline already exists for this file (Article ID: {existing_article.id})")
+                        print(f"💡 Use --force flag to overwrite existing timeline")
+                        print(f"💡 Or use --preview-only to just see the timeline without saving")
+                        return existing_article.id
+                else:
+                    # Create new article entry
+                    pseudo_article = NewsArticle(
+                        title=title,
+                        url=base_url,
+                        raw_content="",
+                        enhanced_content=open(file_path, 'r', encoding='utf-8').read(),
+                        timeline_json=timeline,
+                        workflow_phase='timeline_generated'
+                    )
+                    
+                    db.session.add(pseudo_article)
+                    db.session.commit()
+                    
+                    print(f"💾 Timeline saved to database as Article ID: {pseudo_article.id}")
+                    print(f"🎯 NEXT STEPS:")
+                    print(f"   # Standard approach:")
+                    print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name]")
+                    print(f"   # Cost-effective approach:")
+                    print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name] --no-kontext")
+                    print(f"   # Video composition:")
+                    print(f"   flask video-compose --article-id {pseudo_article.id} --video-file [your_video.mp4]")
+                    
+                    return pseudo_article.id
             else:
                 print("📋 Preview mode - timeline not saved to database")
                 print("💡 Remove --preview-only flag to save timeline and enable image generation")
@@ -892,7 +923,7 @@ def create_app(config_class=Config):
 
             # Save to enhanced_scripts directory with timestamped filename
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            script_dir = os.path.join(private_dir, 'writing_style_samples', 'output', 'enhanced_scripts')
+            script_dir = os.path.join('.private', 'writing_style_samples', 'output', 'enhanced_scripts')
             os.makedirs(script_dir, exist_ok=True)
             filename = f"news_response_{timestamp}_{query.replace(' ', '_')[:30]}.txt"
             filepath = os.path.join(script_dir, filename)
@@ -2618,124 +2649,6 @@ def create_app(config_class=Config):
             
         except Exception as e:
             print(f"❌ Error generating voice response: {e}")
-            import traceback
-            traceback.print_exc()
-
-    @click.command(name='generate-timeline-from-file')
-    @click.option('--file-path', required=True, type=str, help='Path to text file containing content for timeline generation.')
-    @click.option('--title', type=str, help='Optional title for the timeline (defaults to filename).')
-    @click.option('--preview-only', is_flag=True, help='Show timeline without saving to database.')
-    @click.option('--use-concepts', is_flag=True, help='Use concept-based timeline generation for better results.')
-    @click.option('--theme', type=click.Choice(FLUX_THEMES.keys()), help='Optional theme for concept-based generation.')
-    @with_appcontext
-    def generate_timeline_from_file_command(file_path, title, preview_only, use_concepts, theme):
-        """Generate timeline from any text file with optional concept-based analysis."""
-        from .text_processor import generate_timeline_from_file, generate_concept_based_timeline
-        import os
-        from datetime import datetime
-        
-        print(f"📄 Generating timeline from file: {file_path}")
-        print(f"🧠 Method: {'Concept-based analysis' if use_concepts else 'Standard segmentation'}")
-        if theme:
-            print(f"🎨 Theme: {theme}")
-        
-        # Verify file exists
-        if not os.path.exists(file_path):
-            print(f"❌ File not found: {file_path}")
-            return
-        
-        try:
-            if use_concepts:
-                # Read file content for concept analysis
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                
-                # Extract main content (skip metadata)
-                lines = content.split('\n')
-                content_start = 0
-                
-                for i, line in enumerate(lines):
-                    if line.strip() == '---' and i > 0:
-                        content_start = i + 1
-                        break
-                    elif line.strip() and not line.startswith('#') and not line.startswith('**'):
-                        content_start = i
-                        break
-                
-                main_content = '\n'.join(lines[content_start:]).strip()
-                
-                if len(main_content) < 100:
-                    print(f"❌ File content too short for concept analysis: {len(main_content)} characters")
-                    return
-                
-                # Generate concept-based timeline
-                timeline = generate_concept_based_timeline(main_content, theme)
-                
-            else:
-                # Use standard timeline generation
-                timeline = generate_timeline_from_file(file_path)
-            
-            # Calculate duration and statistics
-            total_scenes = len(timeline)
-            total_words = sum(len(scene.get('text', '').split()) for scene in timeline)
-            total_duration = sum(scene.get('duration_seconds', 0) for scene in timeline)
-            
-            print(f"\n✅ Timeline generated successfully!")
-            print(f"📊 Statistics:")
-            print(f"   🎬 Total scenes: {total_scenes}")
-            print(f"   📝 Total words: {total_words}")
-            print(f"   ⏱️  Total duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)")
-            
-            # Show timeline preview
-            print(f"\n📋 TIMELINE PREVIEW:")
-            print("="*80)
-            for scene in timeline:
-                duration = scene.get('duration_seconds', 0)
-                text_preview = scene.get('text', '')[:60] + "..." if len(scene.get('text', '')) > 60 else scene.get('text', '')
-                visual_preview = scene.get('description', '')[:50] + "..." if len(scene.get('description', '')) > 50 else scene.get('description', '')
-                
-                print(f"Scene {scene.get('scene', '?')} ({duration}s)")
-                print(f"  📝 Text: {text_preview}")
-                print(f"  🖼️  Visual: {visual_preview}")
-                if 'concept' in scene:
-                    print(f"  💡 Concept: {scene['concept']}")
-                print(f"  👤 User scene: {'Yes' if scene.get('is_user_scene') else 'No'}")
-                print()
-            
-            if not preview_only:
-                # Save timeline to database
-                if not title:
-                    title = f"Timeline from {os.path.basename(file_path)}"
-                
-                # Create a pseudo-article entry for file-based timelines
-                pseudo_article = NewsArticle(
-                    title=title,
-                    url=f"file://{file_path}",
-                    raw_content="",
-                    enhanced_content=open(file_path, 'r', encoding='utf-8').read(),
-                    timeline_json=timeline,
-                    workflow_phase='timeline_generated'
-                )
-                
-                db.session.add(pseudo_article)
-                db.session.commit()
-                
-                print(f"💾 Timeline saved to database as Article ID: {pseudo_article.id}")
-                print(f"🎯 NEXT STEPS:")
-                print(f"   # Standard approach:")
-                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name]")
-                print(f"   # Cost-effective approach:")
-                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name] --no-kontext")
-                print(f"   # Video composition:")
-                print(f"   flask video-compose --article-id {pseudo_article.id} --video-file [your_video.mp4]")
-                
-                return pseudo_article.id
-            else:
-                print("📋 Preview mode - timeline not saved to database")
-                print("💡 Remove --preview-only flag to save timeline and enable image generation")
-            
-        except Exception as e:
-            print(f"❌ Error generating timeline from file: {e}")
             import traceback
             traceback.print_exc()
 

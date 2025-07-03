@@ -77,7 +77,7 @@ playwright install
 mkdir private\writing_style_samples
 
 # Add your personal writing samples as .md files
-# Structure: private/writing_style_samples/essay1.md, opinion2.md, etc.
+# Structure: .private/writing_style_samples/essay1.md, opinion2.md, etc.
 ```
 
 ### Step 3: Environment Configuration
@@ -138,7 +138,7 @@ flask generate-voice-response "climate change policy"
 flask generate-voice-response "AI regulation debate" --length 200 --top-articles 5
 ```
 
-**Output**: Saves to `private/writing_style_samples/test/` with source attribution.
+**Output**: Saves to `.private/writing_style_samples/output/enhanced_scripts` with source attribution.
 
 ### 4.2 Custom Prompt Responses
 
@@ -155,7 +155,7 @@ flask voice-respond --query "How does this apply to remote work?" --context-file
 flask voice-respond --query "Your thoughts on AI in creative work" --length 300
 ```
 
-**Output**: Saves to `private/writing_style_samples/output/enhanced_scripts/`
+**Output**: Saves to `.private/writing_style_samples/output/enhanced_scripts/`
 
 ### 4.3 Timeline Generation
 
@@ -236,35 +236,163 @@ $env:ARTICLE_SERVICE = "newsapi"
 
 ### 4.8 File Organization
 
-The system automatically organizes outputs:
+#### Current System (Legacy)
+
+The system currently uses this scattered structure:
 
 ```
 media-buddy/
-├── private/
-│   └── writing_style_samples/     # Your personal writing (RAG component)
-│       ├── test/                  # News response outputs
-│       └── output/enhanced_scripts/ # Voice-respond outputs
+├── .private/
+│   └── writing_style_samples/              # Your personal writing (RAG component)
+│       ├── samples/                        # Raw .md writing samples
+│       ├── test/                           # News response outputs
+│       └── output/enhanced_scripts/        # Voice-respond outputs
 ├── instance/
-│   ├── images/[article_id]/       # Generated images
-│   ├── text/[article_id]/         # Script files
-│   └── output/[article_id]/       # Final videos
+│   ├── images/[article_id]/                # Generated images
+│   │   ├── scene_X.webp                   # Raw images
+│   │   └── scene_X_styled.png             # Styled images
+│   ├── text/[article_id]/                 # Script files
+│   └── output/[article_id]/               # Final videos
 ```
 
-### 4.9 Development and Testing Commands
+#### Recommended Project Structure (Future)
+
+For better organization, consider organizing projects like this:
+
+```
+media-buddy/
+├── projects/
+│   ├── my_ai_analysis/                     # Individual project
+│   │   ├── 01_scripts/                     # Generated content & scripts
+│   │   ├── 02_timelines/                   # Timeline JSON files
+│   │   ├── 03_images/                      # All images (raw & styled)
+│   │   ├── 04_videos/                      # Input recordings & final output
+│   │   └── project_notes.md                # Personal project notes
+│   └── climate_change_response/            # Another project
+│       └── [same structure]
+└── .private/
+    └── writing_style_samples/              # Your voice training data
+        └── [personal writing samples]
+```
+
+**Benefits**: Project-based organization makes it easier to manage multiple content projects and share specific projects with others.
+
+### 4.9 Advanced Timeline Generation
+
+#### Concept-Based Timeline Generation
 
 ```powershell
-# Check workflow status
-flask story-status --article-id 123
+# Test what concepts the AI identifies in your content
+flask test-concept-analysis --file-path "my_content.txt"
 
-# Test image generation
-flask test-image --prompt "A futuristic cityscape"
+# Preview concept-based timeline with actual image prompts
+flask preview-concept-timeline --file-path "my_content.txt" --theme retro_anime_80s --show-prompts
 
-# Test archive content extraction
-flask test-archive --verbose
-
-# Test database connection
-python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+# Compare standard vs concept-based timeline generation
+flask compare-timelines --file-path "my_content.txt" --theme cyberpunk_neon
 ```
+
+#### Advanced Timeline Options
+
+```powershell
+# Force overwrite existing timeline
+flask generate-timeline-from-file --file-path "content.txt" --force
+
+# Use concept-based analysis for better image generation
+flask generate-timeline-from-file --file-path "content.txt" --use-concepts --theme film_noir
+
+# Cost-effective image generation (skip expensive Kontext styling)
+flask timeline-approve --article-id 123 --theme retro_anime_80s --no-kontext
+```
+
+### 4.10 Complete Command Reference
+
+#### **Content Generation Commands**
+
+```powershell
+# News & Article Processing
+flask fetch-news "search query"                     # Fetch news articles
+flask discover-story "topic" --count 5              # Discover multiple articles
+flask archive-enhance "query" --count 3 --verbose  # Get full content via Archive.is
+flask create-article --query "topic" --auto        # Create article from discovery
+
+# Voice & Content Generation
+flask generate-voice-response "news topic"         # Your take on news topic
+flask voice-respond --query "any question"         # Direct voice response
+flask generate-voiced-summary --article-id 123     # Summarize existing article
+flask enhance-writing --article-id 123             # Enhance with your voice
+```
+
+#### **Timeline & Visual Commands**
+
+```powershell
+# Timeline Generation
+flask generate-timeline --article-id 123           # Basic timeline from article
+flask generate-enhanced-timeline --article-id 123  # Enhanced timeline
+flask generate-timeline-from-file --file-path "content.txt"  # Timeline from any file
+
+# Image Generation & Styling
+flask timeline-approve --article-id 123 --theme cyberpunk_neon  # Generate images
+flask generate-raw-images --article-id 123 --limit 5           # Raw images only
+flask stylize-images --article-id 123 --theme van_gogh         # Apply styling
+flask source-images --article-id 123                           # Source image descriptions
+flask process-visuals --article-id 123 --theme pixel_art       # Complete visual processing
+```
+
+#### **Video Production Commands**
+
+```powershell
+# Video Composition
+flask create-video --article-id 123                           # Images + audio to video
+flask compose-video --input-dir "assets/" --output-filename "final.mp4"  # Directory to video
+flask video-compose --article-id 123 --video-file "recording.mov"        # Final composition
+```
+
+#### **Workflow Management Commands**
+
+```powershell
+# Complete Workflows
+flask story-create --story-file "thoughts.txt" --news-query "AI policy"  # Story + news context
+flask script-generate --article-id 123 --length 200                     # Generate script
+flask process-story --query "climate change" --theme watercolor_soft     # End-to-end processing
+flask process-script "script.txt" --theme noir_dramatic                  # Process existing script
+
+# Status & Management
+flask story-status --article-id 123 --list-all      # Check story status
+flask workflow-status --article-id 123              # Check workflow progress
+flask workflow-init --article-id 123 --force        # Reset/restart workflow
+flask assemble-final --article-id 123               # Assemble final assets
+```
+
+#### **Collaboration & Learning Commands**
+
+```powershell
+# User Contributions
+flask contribute-take --article-id 123 --input-file "my_take.txt"  # Add your perspective
+flask record-edit "original.txt" "edited.txt" "topic"              # Record editing session
+
+# Style & Learning
+flask style-insights                                # Analyze your writing patterns
+```
+
+#### **Development & Testing Commands**
+
+```powershell
+# Testing & Debugging
+flask test-image --prompt "A futuristic cityscape" --user-scene     # Test single image
+flask test-archive --verbose                                        # Test content extraction
+flask test-concept-analysis --file-path "content.txt"               # Test concept identification
+flask preview-concept-timeline --file-path "content.txt" --show-prompts  # Preview with prompts
+flask compare-timelines --file-path "content.txt" --theme cyberpunk_neon  # Compare methods
+
+# Database & System
+flask init-db                                      # Initialize database
+flask process-articles                             # Process fetched articles
+```
+
+#### **Available Visual Themes**
+
+`retro_anime_80s`, `cyberpunk_neon`, `watercolor_soft`, `noir_dramatic`, `abstract_geometric`, `van_gogh`, `pixel_art`, `cosmic_horror`, `film_noir`, `pastel_dreams`, `steampunk_brass`, `minimalist_modern`, `gothic_cathedral`, `neon_synthwave`, `organic_natural`
 
 ## 5. Troubleshooting
 
@@ -278,7 +406,7 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 **Issue**: `No writing style samples found`
 
 - **Solution**:
-  - Ensure `private/writing_style_samples/` directory exists
+  - Ensure `.private/writing_style_samples/` directory exists
   - Add `.md` files with your personal writing (aim for 50KB+ total)
   - Verify files contain substantial, authentic writing samples
 
