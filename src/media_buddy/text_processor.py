@@ -509,6 +509,52 @@ def generate_voiced_response_to_query(query: str, context_content: str = None, l
     response = model.generate_content(prompt)
     return response.text
 
+def generate_timeline_from_file(filepath: str) -> list[dict]:
+    """
+    Generates a timeline from any text file containing content.
+    This bridges file-based voice outputs to the timeline generation system.
+
+    Args:
+        filepath: Path to text file containing the content to convert to timeline
+
+    Returns:
+        List of timeline scene dictionaries with text, description, scene number, etc.
+    """
+    import os
+    
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"Content file not found: {filepath}")
+    
+    # Read the file content
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read().strip()
+    
+    # Extract just the main content if it has markdown headers/metadata
+    lines = content.split('\n')
+    content_start = 0
+    
+    # Skip past any markdown headers and metadata
+    for i, line in enumerate(lines):
+        if line.strip() == '---' and i > 0:  # End of frontmatter
+            content_start = i + 1
+            break
+        elif line.startswith('# ') or line.startswith('**'):  # Headers or bold metadata
+            continue
+        elif line.strip() and not line.startswith('#') and not line.startswith('**'):
+            content_start = i
+            break
+    
+    # Extract the actual content
+    main_content = '\n'.join(lines[content_start:]).strip()
+    
+    if not main_content or len(main_content) < 100:
+        raise ValueError(f"File content too short for timeline generation: {len(main_content)} characters")
+    
+    # Generate timeline using existing function
+    timeline = generate_timeline(main_content)
+    
+    return timeline
+
 if __name__ == '__main__':
     # Example usage for direct testing
     test_text = (

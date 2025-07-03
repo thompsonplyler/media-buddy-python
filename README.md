@@ -1,468 +1,349 @@
 # Media Buddy
 
-**A Flask-based AI pipeline that transforms news articles into personalized, voiced content using sophisticated prompt engineering and vector embeddings.**
+**Transform news articles into personalized, voiced content with AI-powered voice adoption and visual timelines.**
 
-Media Buddy fetches full news articles (not just snippets), processes them through multiple AI stages, and outputs content that authentically matches your personal writing style.
+## 1. Overview
 
-## 🎯 Project Purpose
+Media Buddy is a Flask-based AI pipeline that learns your personal writing style and generates content that authentically matches your voice. It combines news analysis, prompt responses, timeline generation, and multimedia production into a comprehensive content creation system.
 
-Media Buddy solves the **"AI voice adoption problem"** that most systems struggle with. Instead of generic AI-generated content, it:
+### Key Features
 
-- **Learns Your Voice**: Uses 70KB+ of personal writing samples to understand your unique style, tone, and perspective
-- **Separates Style from Content**: Sophisticated prompt engineering that captures _how_ you write, not _what_ you write about
-- **Fetches Full Articles**: Uses Google News + Playwright scraping to get complete article content (4,000-8,900 characters vs 214-character snippets)
-- **Generates Semantic Embeddings**: Creates 384-dimensional vectors for intelligent content similarity and search
-- **Builds Visual Timelines**: Converts text into structured visual scene descriptions for multimedia projects
+- **Voice Adoption**: Uses your personal writing samples to generate content in your authentic style
+- **News Analysis**: Fetches full articles (not snippets) to generate your response
+- **Custom Prompts**: Responds to any query in your voice, not just news topics
+- **Visual Timelines**: Converts text into structured scene descriptions with duration estimates
+- **Image Generation**: Creates styled images from timelines using 15+ visual themes
+- **Video Production**: Composes final videos with professional layout control
 
-The core innovation is a 7-step pipeline that transforms raw news into personalized, voiced content while maintaining semantic understanding through vector embeddings.
+### Core Workflows
 
-## 🔧 System Requirements
+1. **News Response**: `flask generate-voice-response "topic"` → Your analysis of current events
+2. **Custom Prompts**: `flask voice-respond --query "question"` → Your response to any prompt
+3. **Complete Production**: Text → Timeline → Images → Video
 
-### Required Software (Must Install First)
+## 2. Requirements and Prerequisites
 
-1. **Python 3.10+** (Tested on Python 3.10.11)
-2. **PostgreSQL 14+** with **pgvector extension**
-   - pgvector must be compiled and installed on your system
-   - See [pgvector installation guide](https://github.com/pgvector/pgvector#installation)
-3. **Git** (for cloning the repository)
-4. **Playwright** (for web scraping full articles)
-   - Automatically installs browser binaries on first use
+### Software Requirements
+
+- **Python 3.10+** (Tested on Python 3.10.11)
+- **PostgreSQL 14+** with **pgvector extension** compiled and installed
+- **Git** for repository cloning
+- **Windows PowerShell** (All examples use PowerShell syntax)
 
 ### Hardware Recommendations
 
-- **GPU**: CUDA-compatible GPU recommended for faster embedding generation (automatically falls back to CPU)
-- **RAM**: 8GB+ recommended (AI models and vector processing are memory-intensive)
+- **RAM**: 8GB+ (AI models are memory-intensive)
+- **GPU**: CUDA-compatible GPU recommended (automatically falls back to CPU)
 - **Storage**: 2GB+ for models and generated content
-- **Network**: Stable internet connection for news scraping (some sites implement bot detection)
+- **Network**: Stable internet connection for news scraping
 
-### Development Environment
+### API Keys Required
 
-**IMPORTANT**: This project is developed and tested on **Windows PowerShell**. All command examples use PowerShell syntax (`$env:VARIABLE = "value"`).
+_These are notes for current configuration of AI and news services. System will eventually be compatible with OpenAI and Claude_
 
-## 🚀 Quick Start
+- **Gemini API Key** (Google AI Studio) - Required for voice generation
+- **News API Key** (newsapi.org) - Optional, for alternative news source
+- **Replicate API Key** - Required for image generation
 
-### 1. Clone and Setup
+### Personal Content Required
+
+You must provide substantial personal writing samples (50KB+ recommended):
+
+- Personal essays, blog posts, social media content
+- Political opinions, reviews, personal reflections
+- Any authentic writing that represents your voice and style
+
+_My writing samples included ~20 recent comments I've made that I felt capture my written voice most accurately as well as an exhaustive AI-generated "POV" document that describes my position on everyting from alternative economic systems to least favorite foods._
+
+## 3. Installation and Verification
+
+### Step 1: Clone and Setup Environment
+
+_Instructions are specific to PowerShell installation, but similar steps should work for Mac/Linux configurations so long as requirements are met._
 
 ```powershell
 git clone <your-repo-url>
 cd media-buddy
-
-# Create and activate virtual environment (Windows PowerShell)
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Install Playwright browsers (required for news scraping)
 playwright install
 ```
 
-### 2. Critical: Setup RAG Component (Writing Style Samples)
+### Step 2: Create Voice Sample Directory
 
-**⚠️ Important**: The RAG folder (`private/writing_style_samples/`) is excluded from git for privacy. You must create it manually.
+```powershell
+# Create the directory (excluded from git for privacy)
+mkdir private\writing_style_samples
 
-**What to include**:
-
-- Personal essays, blog posts, social media content
-- Political opinions, book reviews, personal reflections
-- Aim for 50KB+ total content for best voice adoption results
-- Save as `.md` files with descriptive names
-
-### 3. Environment Configuration
-
-Create a `.env` file in the project root:
-
-```bash
-# Database Configuration
-DATABASE_URL=postgresql://username:password@localhost:5432/media_buddy
-
-# API Keys
-GEMINI_API_KEY=your_gemini_api_key_here
-NEWS_API_KEY=your_news_api_key_here
-
-# Article Service Configuration
-ARTICLE_SERVICE=googlenews  # Options: 'newsapi' or 'googlenews'
-
-# Optional: Hugging Face for additional models
-HF_API_KEY=your_huggingface_key_here
+# Add your personal writing samples as .md files
+# Structure: private/writing_style_samples/essay1.md, opinion2.md, etc.
 ```
 
-### 4. Database Setup
+### Step 3: Environment Configuration
+
+Create `.env` file in project root:
+
+```bash
+# Database
+DATABASE_URL=postgresql://username:password@localhost:5432/media_buddy
+
+# Required API Keys
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional API Keys
+NEWS_API_KEY=your_news_api_key_here
+REPLICATE_API_TOKEN=your_replicate_token_here
+
+# Service Configuration
+ARTICLE_SERVICE=googlenews
+```
+
+### Step 4: Database Setup
 
 ```powershell
 # Initialize database and create tables
 flask init-db
-
-# This creates all tables including vector column for embeddings
-# Requires pgvector extension to be installed in PostgreSQL
 ```
 
-## 📖 Usage
-
-### Collaborative Writing Workflow (NEW!)
-
-Media Buddy now features a sophisticated collaborative writing workflow that combines human perspective with AI enhancement:
+### Step 5: Verification
 
 ```powershell
-# 1. Discover and create articles with full content (not snippets!)
-flask discover-story "artificial intelligence breakthroughs"
-flask create-article --query "artificial intelligence breakthroughs" --auto
+# Test basic voice response (requires writing samples)
+flask voice-respond --query "What's your take on technology?" --length 100
 
-# 2. Initialize workflow state management
-flask workflow-init --article-id 1
+# Test news analysis (requires API keys)
+flask generate-voice-response "artificial intelligence" --length 100
 
-# 3. Add your unique perspective to the story
-flask contribute-take --article-id 1
-
-# 4. AI enhances your contribution while preserving your voice
-flask enhance-writing --article-id 1 --length 200
-
-# 5. Generate visual timeline from enhanced content
-flask generate-enhanced-timeline --article-id 1
-
-# 6. Create images and assemble final assets
-flask process-visuals --article-id 1 --theme retro_anime_80s
-flask assemble-final --article-id 1
+# Check database connection
+python -c "from src.media_buddy.extensions import db; print('Database connected successfully')"
 ```
 
-**Key Benefits:**
+## 4. Using the App
 
-- **Human-AI Collaboration**: Your unique perspective + AI enhancement
-- **Full Content**: 4,000-8,900 character articles via Archive.is fallback
-- **Workflow State Management**: Persistent state across CLI commands
-- **Modular Design**: Each phase can be run independently
+### 4.1 News Topic Analysis
 
-### 🚀 Streamlined Turnkey Workflow (NEWEST!)
-
-For maximum efficiency, use the new 5-command turnkey workflow that takes you from story idea to final video:
+Generate your response to current news events:
 
 ```powershell
-# 1. Create story from your preliminary text + 3 reliable news articles
-flask story-create --story-file "my_story.txt" --news-query "AI breakthroughs" --title "My AI Analysis"
+# Basic news analysis
+flask generate-voice-response "climate change policy"
 
-# 2. Generate Thompson's enhanced script with timeline and duration estimates
-flask script-generate --article-id 123 --length 200
+# Detailed analysis with more sources
+flask generate-voice-response "AI regulation debate" --length 200 --top-articles 5
+```
 
-# 3. Review complete timeline and generate styled images (shows full text + visuals)
+**Output**: Saves to `private/writing_style_samples/test/` with source attribution.
+
+### 4.2 Custom Prompt Responses
+
+Generate responses to any question or prompt:
+
+```powershell
+# Simple prompt
+flask voice-respond --query "What's your philosophy on work-life balance?"
+
+# Build on previous response
+flask voice-respond --query "How does this apply to remote work?" --context-file "previous_response.txt"
+
+# Longer response
+flask voice-respond --query "Your thoughts on AI in creative work" --length 300
+```
+
+**Output**: Saves to `private/writing_style_samples/output/enhanced_scripts/`
+
+### 4.3 Timeline Generation
+
+Convert any text file into visual timelines:
+
+```powershell
+# Preview timeline without saving to database
+flask generate-timeline-from-file --file-path "content.txt" --preview-only
+
+# Create timeline and save to database for image generation
+flask generate-timeline-from-file --file-path "content.txt" --title "My Analysis"
+```
+
+**Output**: Database entry with scene breakdown, duration estimates, and visual descriptions.
+
+### 4.4 Image Generation
+
+Create styled images from timelines:
+
+```powershell
+# Generate images with a visual theme
 flask timeline-approve --article-id 123 --theme retro_anime_80s
 
-# 4. Final video composition (video on TOP, images on BOTTOM)
+# Preview timeline before generating images
+flask timeline-approve --article-id 123 --theme cyberpunk_neon --preview-only
+```
+
+**Available Themes**: `retro_anime_80s`, `cyberpunk_neon`, `watercolor_soft`, `noir_dramatic`, `abstract_geometric`, `van_gogh`, `pixel_art`, `cosmic_horror`
+
+### 4.5 Video Production
+
+Create complete video compositions:
+
+```powershell
+# Final video composition (your recording on top, images below)
 flask video-compose --article-id 123 --video-file "my_recording.mov"
-
-# 5. Track progress and manage workflows
-flask story-status --article-id 123
 ```
 
-**Key Features:**
+**Output**: Professional video layout in `instance/output/123/`
 
-- **Complete Visibility**: Step 3 shows the entire timeline with text content and visual descriptions
-- **Duration Analysis**: Automatic timing estimates (150 words/minute) for precise video planning
-- **Video Layout Control**: Recorded video prominently displayed on top with slideshow images below
-- **Story-First Approach**: Your preliminary story drives the narrative, enhanced with relevant news context
-- **Turnkey Process**: Each command tells you exactly what to run next
+### 4.6 Complete Production Workflow
 
-**⚠️ Voice Generation Setup**: Since `private/writing_style_samples/` is gitignored, you must:
-
-1. **Create the directory**: `mkdir -p private/writing_style_samples`
-2. **Add your writing samples**: Save personal essays, blog posts, and writing samples as `.md` files
-3. **Aim for 50KB+ total content**: More samples = better voice adoption
-4. **Include diverse content**: Political opinions, reviews, personal reflections for authentic voice capture
-
-### Archive.is Enhancement (Breakthrough!)
-
-For maximum content quality, use the Archive.is enhancement pipeline:
+End-to-end content creation:
 
 ```powershell
-# Automatically enhance snippet articles with full content from Archive.is
-flask archive-enhance "breaking news topic" --count 3 --verbose
+# 1. Create story with your thoughts + news context
+flask story-create --story-file "my_thoughts.txt" --news-query "AI breakthroughs"
+
+# 2. Generate enhanced script with timeline and duration estimates
+flask script-generate --article-id 123
+
+# 3. Create styled images (shows complete timeline first)
+flask timeline-approve --article-id 123 --theme retro_anime_80s
+
+# 4. Compose final video
+flask video-compose --article-id 123 --video-file "recording.mov"
 ```
 
-This command discovers articles, identifies snippets, and uses Archive.is/Wayback Machine to retrieve full content, often increasing article length by 20-40x.
+### 4.7 Configuration Options
 
-### Legacy Pipeline Commands
-
-For traditional automated processing:
+#### Switch Content Sources
 
 ```powershell
-# Complete automated pipeline (bypasses collaborative workflow)
-flask process-story --query "topic" --theme "retro_anime_80s" --length 200
-
-# Individual legacy commands
-flask fetch-news "artificial intelligence"
-flask process-articles
-flask generate-voiced-summary --article-id 1 --length 125
-flask generate-timeline --article-id 1
-```
-
-### Development and Testing Commands
-
-```powershell
-# Test image generation with custom prompts
-flask test-image --prompt "A futuristic cityscape at sunset"
-
-# Test Archive.is content extraction
-flask test-archive --verbose
-
-# Check workflow status
-flask workflow-status --article-id 1
-flask workflow-status --list-all
-
-# Video generation (requires FFmpeg)
-flask create-video --article-id 1
-flask compose-video --input-dir "instance/output/1" --width 1080 --height 1920
-```
-
-## 🧠 How It Works
-
-### Collaborative Writing Workflow Architecture
-
-Media Buddy implements a sophisticated 6-phase collaborative workflow that combines human insight with AI enhancement:
-
-**Phase 1: Discovery**
-
-- **Google News RSS**: Discovers articles from 100+ quality sources
-- **Archive.is Integration**: Retrieves full content when initial sources provide only snippets
-- **Content Validation**: Ensures substantial article content (4,000-8,900 characters)
-
-**Phase 2: User Contribution**
-
-- **Human Perspective**: User adds their unique take, analysis, or opinion
-- **Flexible Input**: Write directly or load from files
-- **Content Templates**: Guided prompts help structure contributions
-
-**Phase 3: AI Enhancement**
-
-- **Voice Preservation**: AI enhances content while maintaining user's authentic voice
-- **Style Context**: Uses personal writing samples for consistency
-- **Length Control**: Configurable output length for different media formats
-
-**Phase 4: Timeline Generation**
-
-- **Scene Breakdown**: Converts enhanced content into visual scene descriptions
-- **Narrative Structure**: Maintains story flow and pacing
-- **Image Optimization**: Descriptions optimized for text-to-image generation
-
-**Phase 5: Visual Processing**
-
-- **Multi-stage Image Generation**: Raw generation → theme stylization
-- **15+ Visual Themes**: From cinematic to retro anime aesthetics
-- **Scene Intelligence**: Differentiates user-focused vs. general scenes
-
-**Phase 6: Final Assembly**
-
-- **Asset Organization**: Structured output for multimedia production
-- **Metadata Tracking**: Complete workflow history and statistics
-- **Export Ready**: Optimized for video composition and social media
-
-### The Content Acquisition Breakthrough
-
-Traditional systems were limited to 214-character snippets. Media Buddy's multi-tier approach provides:
-
-1. **Primary Discovery**: Google News RSS with source quality rankings
-2. **Archive.is Fallback**: Retrieves full content from archived versions
-3. **Wayback Machine**: Secondary fallback for maximum content coverage
-4. **Bot Detection Resilience**: Graceful handling of anti-scraping measures
-
-**Result**: 20-40x more content than snippet-based systems with 60%+ success rate.
-
-### Workflow State Management
-
-Each article progresses through tracked phases with persistent state:
-
-- **Database-Driven**: State restored from article data across CLI commands
-- **Phase Validation**: Prevents out-of-order execution
-- **Recovery Support**: Workflows can be resumed from any point
-- **Progress Tracking**: Clear visibility into completion status
-
-### The Technical Stack
-
-- **Content Acquisition**: Google News RSS + Archive.is + Wayback Machine via Playwright
-- **Workflow Orchestration**: PipelineOrchestrator with database-driven state management
-- **AI Enhancement**: Gemini API with collaborative writing prompts
-- **Embeddings**: sentence-transformers with `all-MiniLM-L6-v2` model (384 dimensions)
-- **Vector Storage**: PostgreSQL with pgvector extension for semantic search
-- **Image Generation**: Replicate API with FLUX models and theme stylization
-- **Video Composition**: FFmpeg integration for multimedia assembly
-- **Performance**: GPU acceleration, lazy loading, modular service architecture
-
-## 🔍 Key Features
-
-### 1. **End-to-End Pipeline**
-
-- **Single Command Execution**: Complete pipeline from query to final assets
-- **Modular Architecture**: Each step can be run independently for debugging
-- **Service Abstraction**: Easy switching between content sources via environment variables
-- **Error Recovery**: Graceful handling of bot detection and content extraction failures
-
-### 2. **Full-Content News Acquisition**
-
-- **Google News Integration**: Discovers articles from 100+ quality sources
-- **Web Scraping**: Extracts complete article text using Playwright
-- **Source Quality Ranking**: Prioritizes reliable sources (Reuters, AP, BBC, etc.)
-- **Bot Detection Resilience**: Handles anti-scraping measures gracefully
-- **Fallback Support**: Automatically switches between NewsAPI and Google News
-
-### 3. **Voice Adoption System**
-
-- Reads personal writing samples from `private/writing_style_samples/`
-- Uses Gemini API with carefully crafted prompts
-- Maintains authentic voice while writing about any topic
-- Separates writing style from specific content
-- **Style Learning**: Captures improvements from your edits
-
-### 4. **Semantic Embeddings**
-
-- Generates 384-dimensional vectors using sentence-transformers
-- Enables similarity search and content clustering
-- Stored in PostgreSQL with pgvector for efficient querying
-- Supports cosine distance calculations
-
-### 5. **Visual Timeline Generation**
-
-- Converts text into structured scene descriptions
-- Optimized for text-to-image generation
-- Automatically detects user-focused vs. general scenes
-- Outputs clean JSON for multimedia applications
-
-### 6. **Image Generation & Stylization**
-
-- **Multiple Themes**: 15+ visual styles from cinematic to retro anime
-- **Two-Stage Process**: Raw generation → theme stylization
-- **Scene Intelligence**: Detects user-focused vs general scenes
-- **Asset Management**: Organized output structure for final assembly
-
-## 🛠️ Advanced Configuration
-
-### Article Service Selection
-
-Switch between content sources via environment variable (PowerShell syntax):
-
-```powershell
-# Use Google News + Playwright (recommended for full content)
+# Use Google News + full content scraping (recommended)
 $env:ARTICLE_SERVICE = "googlenews"
 
-# Use NewsAPI (faster but limited to snippets)
+# Use NewsAPI (faster, but limited to snippets)
 $env:ARTICLE_SERVICE = "newsapi"
 ```
 
-### Content Quality Tuning
-
-The Google News service includes intelligent filtering:
-
-- **Source Rankings**: Tier 1 (Reuters, AP) to Tier 4 (smaller outlets)
-- **Content Validation**: Automatically detects and skips CAPTCHA/bot pages
-- **Success Rate**: ~60% of articles successfully extracted with full content
-- **Fallback Handling**: Graceful degradation when scraping fails
-
-### Voice Generation Optimization
-
-For different use cases, adjust the length parameter:
+#### Adjust Response Length
 
 ```powershell
-# 60-second audio (recommended)
---length 125
-
-# 90-second audio
---length 175
-
-# 2-minute audio
---length 250
+--length 125    # ~60-second audio (speaking pace: 150 words/minute)
+--length 175    # ~90-second audio
+--length 250    # ~2-minute audio
 ```
 
-**Speaking pace**: ~150-175 words per minute average conversational pace.
+### 4.8 File Organization
 
-### Custom Embedding Models
-
-```python
-# In your environment or config
-EMBEDDING_MODEL="all-mpnet-base-v2"  # Higher quality, larger model
-# or
-EMBEDDING_MODEL="all-MiniLM-L6-v2"   # Default, good balance
-```
-
-### GPU Acceleration
-
-The system automatically detects and uses CUDA if available:
-
-```powershell
-# Check GPU availability
-python -c "import torch; print(torch.cuda.is_available())"
-```
-
-## 🎨 Available Themes
-
-Choose from 15+ visual styles for image generation:
-
-- `default` - Cinematic, dramatic lighting
-- `retro_anime_80s` - 80s sci-fi anime style
-- `holographic_glitch` - Neon cyberpunk aesthetics
-- `modern_noir` - High-contrast black and white
-- `van_gogh` - Impressionist painting style
-- `pixel_art` - 16-bit retro game style
-- `cosmic_horror` - Lovecraftian atmosphere
-- And many more...
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-1. **CUDA Errors**: Usually caused by BART trying to process CAPTCHA pages instead of real articles. The new pipeline bypasses this issue.
-
-2. **Service Configuration**: Ensure `ARTICLE_SERVICE` environment variable is set correctly in PowerShell:
-
-   ```powershell
-   $env:ARTICLE_SERVICE = "googlenews"
-   ```
-
-3. **Content Extraction Failures**: Normal with ~60% success rate. Google News provides multiple article sources automatically.
-
-4. **PowerShell vs Bash**: All examples use PowerShell syntax. Do not use Linux/Mac command formats.
-
-## 📊 Performance Metrics
-
-- **Content Quality**: 4,000-8,900 characters per article (20-40x improvement over snippets)
-- **Success Rate**: 60% extraction success with substantial content
-- **Source Diversity**: 100+ news sources with quality rankings
-- **Voice Authenticity**: Sophisticated prompt engineering captures writing style nuances
-- **Pipeline Speed**: Complete end-to-end processing in under 10 minutes
-
-## 📁 Project Structure
+The system automatically organizes outputs:
 
 ```
 media-buddy/
-├── src/media_buddy/           # Core application modules
-│   ├── text_processor.py     # Voice adoption & embeddings
-│   ├── models.py             # Database models
-│   ├── routes.py             # Web routes (optional)
-│   └── ...
-├── private/                   # Excluded from git
-│   ├── writing_style_samples/ # Your personal writing (RAG component)
-│   ├── customization/        # Project configuration
-│   └── ...
-├── instance/                  # Runtime data (images, etc.)
-├── migrations/               # Database migrations
-├── requirements.txt          # Python dependencies
-└── run.py                   # Flask application entry point
+├── private/
+│   └── writing_style_samples/     # Your personal writing (RAG component)
+│       ├── test/                  # News response outputs
+│       └── output/enhanced_scripts/ # Voice-respond outputs
+├── instance/
+│   ├── images/[article_id]/       # Generated images
+│   ├── text/[article_id]/         # Script files
+│   └── output/[article_id]/       # Final videos
 ```
 
-## 🤝 Contributing
+### 4.9 Development and Testing Commands
 
-This is a personal AI system designed around specific writing samples and use cases. The core voice processing technology (`voice_processor_package.py`) is designed to be portable to other projects.
+```powershell
+# Check workflow status
+flask story-status --article-id 123
 
-## 📄 License
+# Test image generation
+flask test-image --prompt "A futuristic cityscape"
 
-MIT
+# Test archive content extraction
+flask test-archive --verbose
 
-## 🙋 Support
+# Test database connection
+python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+```
 
-For issues related to:
+## 5. Troubleshooting
 
-- **pgvector setup**: See [official pgvector docs](https://github.com/pgvector/pgvector)
-- **Voice adoption quality**: Ensure writing samples are substantial and representative
-- **Performance**: Check GPU availability and memory usage
-- **API keys**: Verify Gemini API key and quotas
+### 5.1 Common Setup Issues
+
+**Issue**: `ImportError: No module named 'pgvector'`
+
+- **Solution**: Ensure pgvector extension is compiled and installed in PostgreSQL
+- **Reference**: [Official pgvector installation guide](https://github.com/pgvector/pgvector#installation)
+
+**Issue**: `No writing style samples found`
+
+- **Solution**:
+  - Ensure `private/writing_style_samples/` directory exists
+  - Add `.md` files with your personal writing (aim for 50KB+ total)
+  - Verify files contain substantial, authentic writing samples
+
+**Issue**: `Database connection failed`
+
+- **Solution**:
+  - Verify PostgreSQL is running
+  - Check `DATABASE_URL` in `.env` file
+  - Ensure database exists: `createdb media_buddy`
+
+### 5.2 Runtime Issues
+
+**Issue**: `GEMINI_API_KEY not found`
+
+- **Solution**:
+  - Get API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+  - Add to `.env` file: `GEMINI_API_KEY=your_key_here`
+  - Restart application after adding key
+
+**Issue**: Content extraction failures (normal ~40% failure rate)
+
+- **Expected**: Google News + Archive.is has ~60% success rate
+- **Solution**: System automatically tries multiple sources; no action needed
+
+**Issue**: CUDA errors on image generation
+
+- **Solution**: System automatically falls back to CPU processing
+- **Check**: `python -c "import torch; print(torch.cuda.is_available())"`
+
+**Issue**: PowerShell command syntax errors
+
+- **Solution**: All commands use PowerShell syntax (`$env:VAR = "value"`)
+- **Do not use**: Bash/Linux syntax (`export VAR=value`)
+
+### 5.3 Performance Issues
+
+**Issue**: Slow response generation
+
+- **Check**: Writing samples are substantial but not excessive (50-100KB optimal)
+- **Check**: Internet connection for news fetching
+- **Check**: GPU availability for faster processing
+
+**Issue**: Image generation timeouts
+
+- **Solution**: Replicate API has rate limits; wait and retry
+- **Alternative**: Use `--preview-only` flag to test timelines without generating images
+
+### 5.4 Content Quality Issues
+
+**Issue**: Generated content doesn't match your voice
+
+- **Solution**:
+  - Add more diverse writing samples (opinions, personal essays, reviews)
+  - Ensure samples represent authentic voice, not formal writing
+  - Include emotional and personal content, not just factual writing
+
+**Issue**: Timeline scenes are poorly described
+
+- **Solution**: Original content should be descriptive and narrative-focused
+- **Check**: Use higher `--length` parameter for more detailed content
+
+### 5.5 Getting Help
+
+For additional support:
+
+- **pgvector setup**: [Official pgvector documentation](https://github.com/pgvector/pgvector)
+- **API quotas**: Check Google AI Studio and Replicate dashboards
+- **Performance**: Verify GPU availability and memory usage
+- **Voice quality**: Ensure writing samples are substantial and representative
 
 ---
 
-**Note**: This system requires substantial personal writing samples to function effectively. The voice adoption quality directly correlates with the quantity and authenticity of your training data.
+**System Requirements Summary**: This system requires substantial personal writing samples to function effectively. Voice adoption quality directly correlates with the quantity and authenticity of your training data.

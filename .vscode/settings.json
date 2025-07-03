@@ -1,0 +1,9 @@
+{
+  "terminal.integrated.shellArgs.windows": [
+    "-NoExit",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "U:\\Thompson\\Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1"
+  ]
+}

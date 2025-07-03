@@ -2480,6 +2480,86 @@ def create_app(config_class=Config):
             import traceback
             traceback.print_exc()
 
+    @click.command(name='generate-timeline-from-file')
+    @click.option('--file-path', required=True, type=str, help='Path to text file containing content for timeline generation.')
+    @click.option('--title', type=str, help='Optional title for the timeline (defaults to filename).')
+    @click.option('--preview-only', is_flag=True, help='Show timeline without saving to database.')
+    @with_appcontext
+    def generate_timeline_from_file_command(file_path, title, preview_only):
+        """Generate timeline from any text file (bridges file-based content to timeline system)."""
+        from .text_processor import generate_timeline_from_file
+        import os
+        from datetime import datetime
+        
+        print(f"📄 Generating timeline from file: {file_path}")
+        
+        # Verify file exists
+        if not os.path.exists(file_path):
+            print(f"❌ File not found: {file_path}")
+            return
+        
+        try:
+            # Generate timeline from file
+            timeline = generate_timeline_from_file(file_path)
+            
+            # Calculate duration and statistics
+            total_scenes = len(timeline)
+            total_words = sum(len(scene.get('text', '').split()) for scene in timeline)
+            total_duration = sum(scene.get('duration_seconds', 0) for scene in timeline)
+            
+            print(f"\n✅ Timeline generated successfully!")
+            print(f"📊 Statistics:")
+            print(f"   🎬 Total scenes: {total_scenes}")
+            print(f"   📝 Total words: {total_words}")
+            print(f"   ⏱️  Total duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)")
+            
+            # Show timeline preview
+            print(f"\n📋 TIMELINE PREVIEW:")
+            print("="*80)
+            for scene in timeline:
+                duration = scene.get('duration_seconds', 0)
+                text_preview = scene.get('text', '')[:60] + "..." if len(scene.get('text', '')) > 60 else scene.get('text', '')
+                visual_preview = scene.get('description', '')[:50] + "..." if len(scene.get('description', '')) > 50 else scene.get('description', '')
+                
+                print(f"Scene {scene.get('scene', '?')} ({duration}s)")
+                print(f"  📝 Text: {text_preview}")
+                print(f"  🖼️  Visual: {visual_preview}")
+                print(f"  👤 User scene: {'Yes' if scene.get('is_user_scene') else 'No'}")
+                print()
+            
+            if not preview_only:
+                # Save timeline to database as a special "file-sourced" article
+                if not title:
+                    title = f"Timeline from {os.path.basename(file_path)}"
+                
+                # Create a pseudo-article entry for file-based timelines
+                pseudo_article = NewsArticle(
+                    title=title,
+                    url=f"file://{file_path}",
+                    raw_content="",  # Not from news source
+                    enhanced_content=open(file_path, 'r', encoding='utf-8').read(),
+                    timeline_json=timeline,
+                    workflow_phase='timeline_generated'
+                )
+                
+                db.session.add(pseudo_article)
+                db.session.commit()
+                
+                print(f"💾 Timeline saved to database as Article ID: {pseudo_article.id}")
+                print(f"🎯 NEXT STEPS:")
+                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name]")
+                print(f"   flask video-compose --article-id {pseudo_article.id} --video-file [your_video.mp4]")
+                
+                return pseudo_article.id
+            else:
+                print("📋 Preview mode - timeline not saved to database")
+                print("💡 Remove --preview-only flag to save timeline and enable image generation")
+            
+        except Exception as e:
+            print(f"❌ Error generating timeline from file: {e}")
+            import traceback
+            traceback.print_exc()
+
     # Register streamlined workflow commands
     app.cli.add_command(story_create_command)
     app.cli.add_command(script_generate_command)
@@ -2518,5 +2598,6 @@ def create_app(config_class=Config):
     app.cli.add_command(compose_video_command)
     app.cli.add_command(test_archive_command)
     app.cli.add_command(voice_respond_command)
+    app.cli.add_command(generate_timeline_from_file_command)
 
     return app
