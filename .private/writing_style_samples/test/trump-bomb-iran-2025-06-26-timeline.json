@@ -1,0 +1,56 @@
+[
+  {
+    "scene": 1,
+    "description": "A man with orange hair and a suit speaks at a podium, confetti falling around him.",
+    "is_user_scene": false,
+    "generated_image_prompt": "photorealistic cinematic photo of A man with orange hair and a suit speaks at a podium, confetti falling around him., dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
+  },
+  {
+    "scene": 2,
+    "description": "A mushroom cloud billows in the distance, viewed through a television screen displaying news footage.",
+    "is_user_scene": false,
+    "generated_image_prompt": "photorealistic cinematic photo of A mushroom cloud billows in the distance, viewed through a television screen displaying news footage., dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
+  },
+  {
+    "scene": 3,
+    "description": "A man in a suit on a television screen shouts enthusiastically, the words \"Flawless Mission!\" displayed as a chyron beneath him.",
+    "is_user_scene": false,
+    "generated_image_prompt": "photorealistic cinematic photo of A man in a suit on a television screen shouts enthusiastically, the words \"Flawless Mission!\" displayed as a chyron beneath him., dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
+  },
+  {
+    "scene": 4,
+    "description": "A dimly lit room, figures in shadows huddled around a table, a document stamped \"DIA Initial Assessment\" visible on the table.",
+    "is_user_scene": false,
+    "found_image_url": "https://picsum.photos/seed/564/800/600"
+  },
+  {
+    "scene": 5,
+    "description": "FBI agents in dark suits and sunglasses, flashlights illuminating a darkened office, searching through file cabinets.",
+    "is_user_scene": false,
+    "generated_image_prompt": "photorealistic cinematic photo of FBI agents in dark suits and sunglasses, flashlights illuminating a darkened office, searching through file cabinets., dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
+  },
+  {
+    "scene": 6,
+    "description": "A man with orange hair and a suit stands flexing his biceps, a spotlight shining on him in a darkened arena.",
+    "is_user_scene": false,
+    "generated_image_prompt": "photorealistic cinematic photo of A man with orange hair and a suit stands flexing his biceps, a spotlight shining on him in a darkened arena., dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
+  },
+  {
+    "scene": 7,
+    "description": "A burning American flag, flames licking at the stars and stripes.",
+    "is_user_scene": false,
+    "found_image_url": "https://picsum.photos/seed/771/800/600"
+  },
+  {
+    "scene": 8,
+    "description": "A gavel striking a sound block, a blurred image of politicians arguing in the background.",
+    "is_user_scene": false,
+    "generated_image_prompt": "photorealistic cinematic photo of A gavel striking a sound block, a blurred image of politicians arguing in the background., dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
+  },
+  {
+    "scene": 9,
+    "description": "A rubber stamp repeatedly stamping \"APPROVED\" on a document titled \"Military Authorization.\"",
+    "is_user_scene": false,
+    "generated_image_prompt": "photorealistic cinematic photo of A rubber stamp repeatedly stamping \"APPROVED\" on a document titled \"Military Authorization.\", dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
+  }
+]

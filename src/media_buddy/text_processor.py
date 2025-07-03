@@ -1,11 +1,13 @@
 import logging
 import os
+import json
 from huggingface_hub import login
 from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 from sentence_transformers import SentenceTransformer
 import torch
 import google.generativeai as genai
 from .models import NewsArticle
+from typing import List, Dict, Optional
 
 # --- Hugging Face Authentication ---
 # Check for the API key in the environment and log in if it exists.
@@ -105,68 +107,96 @@ def generate_timeline(text: str) -> list[dict]:
 
     Returns:
         list[dict]: A list of scene dictionaries with text and visual information, e.g.,
-                    [{"scene": 1, "text": "The CEO felt the pressure.", "description": "A man at a desk with his head in his hands.", "is_user_scene": false},
-                     {"scene": 2, "text": "I decided to take action.", "description": "A person walking confidently down a hallway.", "is_user_scene": true}]
+                    [{"scene": 1, "text": "The CEO felt the pressure.", "description": "A man at a desk with his head in his hands.", "is_user_scene": false, "image_prompt": "photorealistic cinematic photo of A man at a desk with his head in his hands, dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"},
+                     {"scene": 2, "text": "I decided to take action.", "description": "A person walking confidently down a hallway.", "is_user_scene": true, "image_prompt": "photorealistic cinematic photo of thmpsnplylr, a white man in his mid-40s with messy brown hair A person walking confidently down a hallway, dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"}]
     """
-    import json
-
+    
     try:
         genai.configure(api_key=os.environ["GEMINI_API_KEY"])
         model = genai.GenerativeModel('gemini-1.5-pro-latest')
 
         prompt = f"""
-        You are an expert AI content analyzer. Your task is to read the following text and break it down into a sequence of scenes for multimedia production. Each scene needs both the actual text content (for voiceover timing) and a visual description (for image generation).
+        You are creating a visual timeline for multimedia production. Divide the text into short, meaningful scenes (15-25 words each) suitable for voiceover timing.
 
-        Your output MUST be a valid JSON array of objects. Do not include any text, markdown, or explanations outside of the JSON block. Each object in the array should represent one scene and have four keys:
-        1. "scene": An integer representing the scene number (starting from 1).
-        2. "text": The actual text/script content from the original text that corresponds to this scene. This should be the exact words that will be spoken during this visual scene.
-        3. "description": A visually rich, concrete description of the scene for image generation.
-        4. "is_user_scene": A boolean value (`true` or `false`). Set this to `true` if the scene is clearly describing the author of the text (using "I", "me", "my"). Otherwise, set it to `false`.
+        Your output MUST be a valid JSON array of scene objects with these keys:
+        1. "scene": Scene number (integer)
+        2. "text": The exact text from the original that corresponds to this scene
+        3. "description": T5-style natural language description optimized for Flux image generation
+        4. "is_user_scene": Boolean (true if using "I", "me", "my")
+        5. "duration_seconds": Estimated duration based on word count
+        6. "word_count": Number of words in the text
 
-        **CRITICAL RULES FOR TEXT SEGMENTATION:**
-        - **COMPLETE THOUGHTS:** Each scene should contain complete sentences or thoughts, not fragments.
-        - **NATURAL BREAKS:** Break at logical narrative points (topic changes, new subjects, transitions).
-        - **SPEAKING PACE:** Aim for 15-25 words per scene (roughly 3-5 seconds of speech at normal pace).
-        - **PRESERVE ORIGINAL:** Use the exact words from the original text - don't paraphrase or summarize.
+        **SEGMENTATION RULES:**
+        - Aim for 15-25 words per scene (approximately 4-7 seconds)
+        - Break at natural sentence boundaries when possible
+        - Ensure each scene can stand alone visually
+        - Preserve speaker perspective throughout each scene
 
-        **CRITICAL RULES FOR DESCRIPTIONS:**
-        - **BE VISUAL:** Describe what can be SEEN. Avoid abstract concepts, emotions, or intentions. Instead of "She was sad," write "A single tear rolls down her cheek." Instead of "He was angry," write "His knuckles are white as he clenches his fist."
-        - **BE SELF-CONTAINED:** Each description must stand completely on its own. DO NOT use pronouns (he, she, they, it) that refer to subjects in previous scenes. If the same person appears, describe them again (e.g., "A man in a red coat...", "The man in the red coat now walks...").
-        - **BE CONCRETE:** Do not describe abstract ideas like "skepticism" or "innovation". Describe the physical manifestation of those ideas. For example, instead of "a center for innovation," you might describe "gleaming servers in a modern data center" or "scientists collaborating around a futuristic interface."
+        **VISUAL DESCRIPTION RULES (T5/FLUX OPTIMIZED):**
+        - **COMPLETE SENTENCES**: Write as if explaining the scene to a person, not keyword lists
+        - **SINGLE SUBJECT FOCUS**: One person, one object, one location per scene
+        - **NO COMPOSITES**: Never combine multiple elements (no "A and B", no "while", no "with")
+        - **ACTIVE LANGUAGE**: Use verbs to describe actions and interactions
+        - **SPECIFIC DETAILS**: Avoid vague terms like "beautiful" - describe what makes it so
+        - **NO KEYWORD SPAM**: Don't list adjectives - integrate them into natural sentences
 
-        **Example:**
+        **EXAMPLES OF GOOD T5/FLUX DESCRIPTIONS:**
+        ✅ "A middle-aged businessman sits at his desk, rubbing his temples with both hands in frustration."
+        ✅ "A red arrow points sharply downward on a stock market graph displayed on a computer screen."
+        ✅ "An empty boardroom table reflects the overhead fluorescent lighting in a corporate office."
+        ✅ "A person walks alone down a rain-soaked city street at night under dim streetlights."
 
-        ORIGINAL TEXT: "The CEO felt the pressure. The board was unhappy with the slow progress on the new AI project, which they felt was falling behind competitors. I decided to take a walk to clear my head."
+        **EXAMPLES OF BAD KEYWORD-STYLE DESCRIPTIONS:**
+        ❌ "businessman, frustrated, desk, corporate, professional, tired, stressed"
+        ❌ "graph, declining, red arrow, stocks, finance, market crash, economy"
+        ❌ "boardroom, empty chairs, corporate meeting, business, conference table"
+        ❌ "rainy street, night, person walking, urban, city lights, atmospheric"
 
-        CORRECT OUTPUT:
-        [
-            {{"scene": 1, "text": "The CEO felt the pressure.", "description": "A middle-aged man in a business suit sits at a large mahogany desk, his hands pressed against his temples.", "is_user_scene": false}},
-            {{"scene": 2, "text": "The board was unhappy with the slow progress on the new AI project, which they felt was falling behind competitors.", "description": "A line graph projected on a screen shows a declining trend line next to a competitor's rising line.", "is_user_scene": false}},
-            {{"scene": 3, "text": "I decided to take a walk to clear my head.", "description": "A man with messy brown hair walks alone on a rain-slicked city street at night, reflected in the puddles on the pavement.", "is_user_scene": true}}
-        ]
-
-        Now, please process the following text:
-        ---
+        **CONTENT TO PROCESS:**
         {text}
-        ---
         """
 
         response = model.generate_content(prompt)
-        
-        # Clean the response to ensure it's valid JSON
         clean_response = response.text.strip().replace("```json", "").replace("```", "")
         
         timeline = json.loads(clean_response)
         
-        logging.info(f"Successfully generated a timeline with {len(timeline)} scenes.")
+        # Add duration calculations and image prompts
+        words_per_minute = 150
+        for scene in timeline:
+            # Calculate duration
+            if 'word_count' not in scene:
+                scene['word_count'] = len(scene.get('text', '').split())
+            duration = (scene['word_count'] / words_per_minute) * 60
+            scene['duration_seconds'] = round(duration, 1)
+            
+            # Generate image prompts using T5-style natural language
+            description = scene.get('description', '')
+            is_user_scene = scene.get('is_user_scene', False)
+            
+            if is_user_scene:
+                user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                # For user scenes, naturally integrate the user trigger
+                if description.startswith("A person") or description.startswith("A man"):
+                    # Replace generic person reference with specific user trigger
+                    final_prompt = description.replace("A person", user_trigger).replace("A man", user_trigger)
+                else:
+                    # Prepend user trigger naturally
+                    final_prompt = f"{user_trigger} {description.lower()}"
+                # Add photorealistic instruction naturally
+                final_prompt = f"{final_prompt} The image should be a photorealistic cinematic photograph."
+            else:
+                # For non-user scenes, use the T5 description directly with photo instruction
+                final_prompt = f"{description} The image should be a photorealistic cinematic photograph."
+            
+            scene['image_prompt'] = final_prompt
+            scene['generation_mode'] = 'standard_with_kontext'
+        
+        logging.info(f"Generated timeline with {len(timeline)} scenes")
         return timeline
 
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to decode JSON from LLM response: {e}")
-        logging.error(f"Raw response was: {response.text}")
-        return []
     except Exception as e:
-        logging.error(f"An error occurred during timeline generation: {e}")
+        logging.error(f"Error generating timeline: {e}")
         return []
 
 def get_writing_style_examples():
@@ -552,6 +582,279 @@ def generate_timeline_from_file(filepath: str) -> list[dict]:
     
     # Generate timeline using existing function
     timeline = generate_timeline(main_content)
+    
+    return timeline
+
+def analyze_content_concepts(text: str) -> List[Dict]:
+    """
+    Analyzes text content to identify key concepts and themes for visual representation.
+    This creates a conceptual foundation before segmenting into scenes.
+    
+    Args:
+        text (str): The content to analyze
+        
+    Returns:
+        List[Dict]: List of concept dictionaries with themes and visual elements
+    """
+    try:
+        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+
+        prompt = f"""
+        You are a content analyst specializing in visual storytelling. Your task is to read the following text and identify the key CONCEPTS that would be most effective for visual representation.
+
+        Your output MUST be a valid JSON array of concept objects. Each concept should have:
+        1. "concept": A clear, concise name for the concept
+        2. "description": What this concept represents in the context
+        3. "visual_elements": Specific visual elements that could represent this concept
+        4. "emotional_tone": The emotional context (frustrated, analytical, hopeful, etc.)
+        5. "key_phrases": Important phrases from the text that relate to this concept
+
+        Focus on concepts that are:
+        - CONCRETE and visually representable
+        - CENTRAL to the main message
+        - EMOTIONALLY resonant
+        - DISTINCT from each other
+
+        Examples of good concepts:
+        - Political manipulation tactics
+        - Democratic process integrity  
+        - Media amplification cycles
+        - Personal conviction/voting decisions
+        - Social progress vs. backlash
+
+        Text to analyze:
+        ---
+        {text}
+        ---
+        """
+
+        response = model.generate_content(prompt)
+        clean_response = response.text.strip().replace("```json", "").replace("```", "")
+        
+        concepts = json.loads(clean_response)
+        logging.info(f"Analyzed content and identified {len(concepts)} key concepts")
+        return concepts
+
+    except Exception as e:
+        logging.error(f"Error in concept analysis: {e}")
+        return []
+
+def generate_concept_based_timeline(text: str, theme: Optional[str] = None) -> List[Dict]:
+    """
+    Generates a timeline based on conceptual analysis rather than arbitrary segmentation.
+    Creates scenes with single, focused visual concepts and appropriate scene density.
+    
+    Args:
+        text (str): The content to process
+        theme (str, optional): Visual theme to integrate into prompts
+        
+    Returns:
+        List[Dict]: Timeline with concept-based scenes and integrated visual prompts
+    """
+    
+    try:
+        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+
+        # First, analyze concepts to understand the content themes
+        concepts = analyze_content_concepts(text)
+        
+        # Get theme styling if provided
+        theme_integration = ""
+        theme_style = ""
+        if theme:
+            from .themes import FLUX_THEMES
+            theme_style = FLUX_THEMES.get(theme, "")
+            theme_integration = f"""
+            **THEME INTEGRATION:**
+            All visual descriptions must incorporate this style: "{theme_style}"
+            Blend the theme seamlessly into each visual description.
+            """
+
+        concepts_text = json.dumps(concepts, indent=2) if concepts else "No specific concepts identified"
+        
+        prompt = f"""
+        You are creating a visual timeline for multimedia production. Create scenes that are:
+        1. **SINGLE FOCUS**: Each scene shows ONE distinct thing - one person, one object, one location, one action
+        2. **APPROPRIATE DENSITY**: Similar scene count to standard method (~15-25 words per scene)
+        3. **CONCEPT-INFORMED**: Use the concept analysis to create more meaningful visuals
+        4. **FLUX-OPTIMIZED**: Use T5-style natural language descriptions, not keyword lists
+
+        Your output MUST be a valid JSON array of scene objects with these keys:
+        1. "scene": Scene number (integer)
+        2. "text": The exact text from the original that corresponds to this scene
+        3. "concept": Which concept from the analysis this scene represents
+        4. "description": SINGLE, focused visual description optimized for Flux T5 prompting
+        5. "is_user_scene": Boolean (true if using "I", "me", "my")
+        6. "duration_seconds": Estimated duration based on word count
+        7. "word_count": Number of words in the text
+
+        **CRITICAL SEGMENTATION RULES:**
+        - **TARGET 15-25 words per scene** (don't create long scenes)
+        - **Break at natural concept boundaries** but maintain scene density
+        - **Each scene = one visual concept** (not multiple ideas combined)
+        - **Use concepts to inform better visuals** (not to reduce scene count)
+
+        **CRITICAL VISUAL DESCRIPTION RULES (T5/FLUX OPTIMIZED):**
+        - **COMPLETE SENTENCES**: Write as if explaining the scene to a person, not keyword lists
+        - **SINGLE SUBJECT FOCUS**: One person, one object, one location per scene
+        - **NO COMPOSITES**: Never combine multiple elements (no "A and B", no "while", no "with")
+        - **LOGICAL STRUCTURE**: Subject → Action/Pose → Setting → Lighting → Style
+        - **ACTIVE LANGUAGE**: Use verbs to describe actions and interactions
+        - **SPECIFIC DETAILS**: Avoid vague terms like "beautiful" - describe what makes it so
+        - **NO KEYWORD SPAM**: Don't list adjectives - integrate them into natural sentences
+
+        **EXAMPLES OF GOOD T5/FLUX DESCRIPTIONS:**
+        ✅ "A middle-aged businessman sits at his desk, rubbing his temples with both hands in frustration."
+        ✅ "A red arrow points sharply downward on a stock market graph displayed on a computer screen."
+        ✅ "An empty boardroom table reflects the overhead fluorescent lighting in a corporate office."
+        ✅ "A person walks alone down a rain-soaked city street at night under dim streetlights."
+
+        **EXAMPLES OF BAD KEYWORD-STYLE DESCRIPTIONS:**
+        ❌ "businessman, frustrated, desk, corporate, professional, tired, stressed"
+        ❌ "graph, declining, red arrow, stocks, finance, market crash, economy"
+        ❌ "boardroom, empty chairs, corporate meeting, business, conference table"
+        ❌ "rainy street, night, person walking, urban, city lights, atmospheric"
+
+        **EXAMPLES OF BANNED COMPOSITE DESCRIPTIONS:**
+        ❌ "A man at his desk while graphs show declining performance"
+        ❌ "People arguing around a conference table with charts in the background"
+        ❌ "A businessman reviewing documents and checking his phone"
+        ❌ "Multiple politicians debating while crowds watch"
+
+        {theme_integration}
+
+        **CONCEPTS IDENTIFIED:**
+        {concepts_text}
+
+        **ORIGINAL TEXT:**
+        {text}
+        """
+
+        response = model.generate_content(prompt)
+        clean_response = response.text.strip().replace("```json", "").replace("```", "")
+        
+        timeline = json.loads(clean_response)
+        
+        # Add duration calculations and generate final image prompts
+        words_per_minute = 150
+        for scene in timeline:
+            if 'word_count' not in scene:
+                scene['word_count'] = len(scene.get('text', '').split())
+            duration = (scene['word_count'] / words_per_minute) * 60
+            scene['duration_seconds'] = round(duration, 1)
+            
+            # Generate the ACTUAL image prompt that will be sent to the API
+            description = scene.get('description', '')
+            is_user_scene = scene.get('is_user_scene', False)
+            
+            # Ensure description is singular and focused
+            if ' and ' in description or ' with ' in description or ' while ' in description:
+                logging.warning(f"Scene {scene.get('scene', '?')} has composite description: {description}")
+            
+            if theme and theme_style:
+                # Direct theme integration with T5-style natural language
+                if is_user_scene:
+                    user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                    # For user scenes, naturally integrate the user trigger into the T5 description
+                    if description.startswith("A person") or description.startswith("A man"):
+                        # Replace generic person reference with specific user trigger
+                        final_prompt = description.replace("A person", user_trigger).replace("A man", user_trigger)
+                    else:
+                        # Prepend user trigger naturally
+                        final_prompt = f"{user_trigger} {description.lower()}"
+                    # Add theme naturally to the sentence
+                    final_prompt = f"{final_prompt} The scene is styled with {theme_style}"
+                else:
+                    # For non-user scenes, add theme naturally to the description
+                    final_prompt = f"{description} The scene is styled with {theme_style}"
+                scene['image_prompt'] = final_prompt
+                scene['generation_mode'] = 'direct_theme_integration'
+            else:
+                # Standard generation using T5-style descriptions directly
+                if is_user_scene:
+                    user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                    # For user scenes, naturally integrate the user trigger
+                    if description.startswith("A person") or description.startswith("A man"):
+                        # Replace generic person reference with specific user trigger
+                        final_prompt = description.replace("A person", user_trigger).replace("A man", user_trigger)
+                    else:
+                        # Prepend user trigger naturally
+                        final_prompt = f"{user_trigger} {description.lower()}"
+                    # Add photorealistic instruction naturally
+                    final_prompt = f"{final_prompt} The image should be a photorealistic cinematic photograph."
+                else:
+                    # For non-user scenes, use the T5 description directly with photo instruction
+                    final_prompt = f"{description} The image should be a photorealistic cinematic photograph."
+                scene['image_prompt'] = final_prompt
+                scene['generation_mode'] = 'standard_with_kontext'
+        
+        logging.info(f"Generated concept-based timeline with {len(timeline)} scenes")
+        return timeline
+
+    except Exception as e:
+        logging.error(f"Error in concept-based timeline generation: {e}")
+        logging.info("Falling back to standard timeline generation")
+        return generate_timeline(text)
+
+def add_image_prompts_to_timeline(timeline: List[Dict], theme: Optional[str] = None) -> List[Dict]:
+    """
+    Adds final image prompts to an existing timeline based on theme and user scene detection.
+    This shows exactly what will be sent to the image generation API using T5-style prompting.
+    
+    Args:
+        timeline: Existing timeline with descriptions
+        theme: Optional theme to integrate
+        
+    Returns:
+        Updated timeline with image_prompt fields
+    """
+    theme_style = ""
+    if theme:
+        from .themes import FLUX_THEMES
+        theme_style = FLUX_THEMES.get(theme, "")
+    
+    for scene in timeline:
+        description = scene.get('description', '')
+        is_user_scene = scene.get('is_user_scene', False)
+        
+        if theme and theme_style:
+            # Direct theme integration with T5-style natural language
+            if is_user_scene:
+                user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                # For user scenes, naturally integrate the user trigger into the T5 description
+                if description.startswith("A person") or description.startswith("A man"):
+                    # Replace generic person reference with specific user trigger
+                    final_prompt = description.replace("A person", user_trigger).replace("A man", user_trigger)
+                else:
+                    # Prepend user trigger naturally
+                    final_prompt = f"{user_trigger} {description.lower()}"
+                # Add theme naturally to the sentence
+                final_prompt = f"{final_prompt} The scene is styled with {theme_style}"
+            else:
+                # For non-user scenes, add theme naturally to the description
+                final_prompt = f"{description} The scene is styled with {theme_style}"
+            scene['image_prompt'] = final_prompt
+            scene['generation_mode'] = 'direct_theme_integration'
+        else:
+            # Standard generation using T5-style descriptions directly
+            if is_user_scene:
+                user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                # For user scenes, naturally integrate the user trigger
+                if description.startswith("A person") or description.startswith("A man"):
+                    # Replace generic person reference with specific user trigger
+                    final_prompt = description.replace("A person", user_trigger).replace("A man", user_trigger)
+                else:
+                    # Prepend user trigger naturally
+                    final_prompt = f"{user_trigger} {description.lower()}"
+                # Add photorealistic instruction naturally
+                final_prompt = f"{final_prompt} The image should be a photorealistic cinematic photograph."
+            else:
+                # For non-user scenes, use the T5 description directly with photo instruction
+                final_prompt = f"{description} The image should be a photorealistic cinematic photograph."
+            scene['image_prompt'] = final_prompt
+            scene['generation_mode'] = 'standard_with_kontext'
     
     return timeline
 

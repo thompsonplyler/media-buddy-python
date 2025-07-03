@@ -1,0 +1,9 @@
+Alright, let's talk about Sam Wilson. The Falcon. Captain America 2.0. And I'm going to say the thing that feels like it's forbidden in polite comic-book-movie society: the character is fundamentally, conceptually stupid.
+
+It's not about the actor, it's not about the legacy, it's about the basic physics of the thing. We're in a world with a literal god who throws a magic hammer, a green rage monster, and a billionaire who solved advanced robotics and fusion energy in a cave. And then there's Sam. He's a guy. A really nice guy, a good guy, even. And he has... wings. Mechanical wings.
+
+Let's just chew on that for a second. His core competency is strapping on a jetpack with feathers and flying around. In a world where every single bad guy has a gun. He's not bulletproof. He's not super-strong. He's a dude on a hang-glider in a firefight. The amount of suspension of disbelief required to accept that he isn't immediately turned into Swiss cheese by the first goon with an automatic weapon is staggering. It's like sending a guy with a really, really nice kite to fight a tank.
+
+Remember my whole thing about Jessica Jones? How if you can dish it out, your body has to be able to take it? Sam Wilson is the inverse of that problem. He has zero enhanced durability, yet he's flying at high speeds and making hairpin turns that would turn a normal person's organs into a smoothie. It just doesn't work.
+
+And now he's Captain America. So he's got the wings AND a frisbee. Great. So now he can... what, exactly? Go from being a mobile, unarmored target to a mobile, unarmored target who can play catch? It feels like they gave a Little Leaguer a promotion to the MLB because he had a great attitude. I respect the hustle, but let's not pretend it makes a lick of sense. In a world of gods and monsters, we're putting our faith in a guy whose main superpower is not getting his ass shot off.

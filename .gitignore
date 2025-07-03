@@ -50,6 +50,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+.vscode/
 nosetests.xml
 coverage.xml
 *,cover
@@ -98,6 +99,6 @@ ENV/
 # Rope project settings
 .ropeproject
 
-private/
+.private/
 PERSONALITY.MD
 .cursor/

@@ -16,9 +16,9 @@ from src.media_buddy.extensions import db, migrate
 from src.media_buddy.models import NewsArticle
 from src.media_buddy.services.legacy_adapter import fetch_articles
 from src.media_buddy.services.video_compositor import VideoCompositor
-from src.media_buddy.text_processor import generate_summary, generate_embedding, generate_timeline, generate_voiced_summary_from_article, generate_voiced_summary_from_raw_content, generate_voiced_response_from_articles, generate_voiced_summary_from_content
+from src.media_buddy.text_processor import generate_summary, generate_embedding, generate_timeline, generate_voiced_summary_from_article, generate_voiced_summary_from_raw_content, generate_voiced_response_from_articles, generate_voiced_summary_from_content, generate_concept_based_timeline, analyze_content_concepts, add_image_prompts_to_timeline
 from src.media_buddy.style_learning import style_learner
-from src.media_buddy.image_scout import source_image_for_scene, generate_raw_image, apply_style_to_image
+from src.media_buddy.image_scout import source_image_for_scene, generate_raw_image, apply_style_to_image, generate_concept_image
 from src.media_buddy.themes import FLUX_THEMES
 
 def create_app(config_class=Config):
@@ -237,11 +237,14 @@ def create_app(config_class=Config):
     @click.option('--article-id', required=True, type=int, help='Article ID to approve timeline for.')
     @click.option('--theme', required=True, type=click.Choice(FLUX_THEMES.keys()), help='Visual theme for image generation.')
     @click.option('--preview-only', is_flag=True, help='Show timeline without generating images.')
+    @click.option('--no-kontext', is_flag=True, help='Skip expensive kontext styling (use direct theme integration).')
+    @click.option('--use-concepts', is_flag=True, help='Use concept-based timeline generation for better results.')
     @with_appcontext
-    def timeline_approve_command(article_id, theme, preview_only):
-        """Step 3: Approve timeline and generate images."""
+    def timeline_approve_command(article_id, theme, preview_only, no_kontext, use_concepts):
+        """Step 3: Approve timeline and generate images with optional cost control."""
         from .services.pipeline_orchestrator import orchestrator, WorkflowPhase
-        from .image_scout import generate_raw_image, apply_style_to_image
+        from .image_scout import generate_raw_image, apply_style_to_image, generate_concept_image
+        from .text_processor import generate_concept_based_timeline
         from .themes import FLUX_THEMES
         from sqlalchemy.orm.attributes import flag_modified
         import json
@@ -253,8 +256,21 @@ def create_app(config_class=Config):
                 print(f"❌ Article {article_id} not found.")
                 return
             
-            if not article.timeline_json:
-                print(f"❌ Article {article_id} has no timeline. Run 'script-generate' first.")
+            # Generate/regenerate timeline if using concepts
+            if use_concepts:
+                print("🧠 Regenerating timeline using concept-based analysis...")
+                if not article.enhanced_content:
+                    print("❌ No enhanced content found for concept analysis.")
+                    return
+                
+                # Generate new concept-based timeline
+                timeline = generate_concept_based_timeline(article.enhanced_content, theme if not no_kontext else None)
+                article.timeline_json = timeline
+                db.session.commit()
+                print(f"✅ Generated concept-based timeline with {len(timeline)} scenes")
+            
+            elif not article.timeline_json:
+                print(f"❌ Article {article_id} has no timeline. Run 'script-generate' first or use --use-concepts.")
                 return
             
             timeline = article.timeline_json
@@ -271,6 +287,7 @@ def create_app(config_class=Config):
             print(f"   📝 Total words: {total_words}")
             print(f"   ⏱️  Total duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)")
             print(f"   🎨 Theme: {theme}")
+            print(f"   💰 Cost mode: {'Direct theme integration' if no_kontext else 'Kontext styling'}")
             print()
             
             # Show complete timeline
@@ -280,6 +297,8 @@ def create_app(config_class=Config):
                 print(f"🎬 Scene {scene['scene']} ({scene.get('duration_seconds', 0)}s)")
                 print(f"   📝 Text: {scene['text']}")
                 print(f"   🖼️  Visual: {scene['description']}")
+                if 'concept' in scene:
+                    print(f"   💡 Concept: {scene['concept']}")
                 print(f"   👤 User scene: {'Yes' if scene.get('is_user_scene') else 'No'}")
                 print()
             
@@ -287,61 +306,96 @@ def create_app(config_class=Config):
                 print("👁️  Preview mode - no images generated.")
                 print(f"\n🎯 To generate images, run:")
                 print(f"   flask timeline-approve --article-id {article_id} --theme {theme}")
+                if no_kontext:
+                    print(f"   (Cost-effective mode: --no-kontext)")
                 return
             
-            # Generate images
+            # Generate images based on mode
             print("🎨 Generating images...")
             print("-" * 60)
             
-            # Generate raw images using existing modular interface
-            raw_image_count = 0
-            style_prompt = FLUX_THEMES.get(theme)
-            
-            # Generate raw images for scenes that need them
-            scenes_to_process = [s for s in timeline if not s.get('raw_image_path')]
-            for scene in scenes_to_process:
-                scene_number = scene['scene']
-                description = scene.get('description', '')
+            if no_kontext:
+                # Direct theme integration - cost-effective approach
+                print("💰 Using cost-effective direct theme integration")
+                generated_count = 0
                 
-                if description:
-                    raw_path = generate_raw_image(
-                        prompt=description,
-                        article_id=article_id,
-                        scene_number=scene_number,
-                        is_user_scene=scene.get('is_user_scene', False)
-                    )
+                for scene in timeline:
+                    scene_number = scene['scene']
+                    description = scene.get('description', '')
                     
-                    if raw_path:
-                        scene['raw_image_path'] = raw_path
-                        raw_image_count += 1
-                        print(f"✅ Generated raw image for scene {scene_number}")
-                    else:
-                        print(f"❌ Failed to generate raw image for scene {scene_number}")
-            
-            print(f"✅ Generated {raw_image_count} raw images")
-            
-            # Apply theme styling using existing modular interface
-            styled_count = 0
-            scenes_to_stylize = [s for s in timeline if s.get('raw_image_path') and not s.get('stylized_image_path')]
-            
-            for scene in scenes_to_stylize:
-                scene_number = scene['scene']
-                raw_image_path = scene.get('raw_image_path')
+                    if description:
+                        image_path = generate_concept_image(
+                            concept_description=description,
+                            theme=theme,
+                            article_id=article_id,
+                            scene_number=scene_number,
+                            is_user_scene=scene.get('is_user_scene', False),
+                            use_kontext=False
+                        )
+                        
+                        if image_path:
+                            scene['themed_image_path'] = image_path
+                            generated_count += 1
+                            print(f"✅ Generated themed image for scene {scene_number}")
+                        else:
+                            print(f"❌ Failed to generate image for scene {scene_number}")
                 
-                if raw_image_path and os.path.exists(raw_image_path):
-                    styled_path = apply_style_to_image(
-                        image_path_or_url=raw_image_path,
-                        style_prompt=style_prompt,
-                        article_id=article_id,
-                        scene_number=scene_number
-                    )
+                print(f"✅ Generated {generated_count} themed images (cost-effective mode)")
+                
+            else:
+                # Traditional two-step process with kontext styling
+                print("🎨 Using traditional two-step process with kontext styling")
+                
+                # Step 1: Generate raw images
+                raw_image_count = 0
+                style_prompt = FLUX_THEMES.get(theme)
+                
+                scenes_to_process = [s for s in timeline if not s.get('raw_image_path')]
+                for scene in scenes_to_process:
+                    scene_number = scene['scene']
+                    description = scene.get('description', '')
                     
-                    if styled_path:
-                        scene['stylized_image_path'] = styled_path
-                        styled_count += 1
-                        print(f"✅ Styled image for scene {scene_number}")
-                    else:
-                        print(f"❌ Failed to style image for scene {scene_number}")
+                    if description:
+                        raw_path = generate_raw_image(
+                            prompt=description,
+                            article_id=article_id,
+                            scene_number=scene_number,
+                            is_user_scene=scene.get('is_user_scene', False)
+                        )
+                        
+                        if raw_path:
+                            scene['raw_image_path'] = raw_path
+                            raw_image_count += 1
+                            print(f"✅ Generated raw image for scene {scene_number}")
+                        else:
+                            print(f"❌ Failed to generate raw image for scene {scene_number}")
+                
+                print(f"✅ Generated {raw_image_count} raw images")
+                
+                # Step 2: Apply kontext styling
+                styled_count = 0
+                scenes_to_stylize = [s for s in timeline if s.get('raw_image_path') and not s.get('stylized_image_path')]
+                
+                for scene in scenes_to_stylize:
+                    scene_number = scene['scene']
+                    raw_image_path = scene.get('raw_image_path')
+                    
+                    if raw_image_path and os.path.exists(raw_image_path):
+                        styled_path = apply_style_to_image(
+                            image_path_or_url=raw_image_path,
+                            style_prompt=style_prompt,
+                            article_id=article_id,
+                            scene_number=scene_number
+                        )
+                        
+                        if styled_path:
+                            scene['stylized_image_path'] = styled_path
+                            styled_count += 1
+                            print(f"✅ Styled image for scene {scene_number}")
+                        else:
+                            print(f"❌ Failed to style image for scene {scene_number}")
+                
+                print(f"✅ Applied kontext styling to {styled_count} images")
             
             # Mark timeline as modified for SQLAlchemy
             flag_modified(article, "timeline_json")
@@ -362,42 +416,145 @@ def create_app(config_class=Config):
             # Create full script file
             script_path = os.path.join(text_output_dir, 'full_script.txt')
             with open(script_path, 'w', encoding='utf-8') as f:
-                f.write(f"# {article.title}\n")
-                f.write(f"# Generated: {article.url.replace('story://created_', '').replace('_', ' ')}\n")
-                f.write(f"# Total Duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)\n\n")
-                f.write("="*80 + "\n")
-                f.write("FULL SCRIPT\n")
-                f.write("="*80 + "\n\n")
-                f.write(article.enhanced_content)
+                f.write(article.enhanced_content or "")
             
-            # Create scene-by-scene script file  
-            scene_script_path = os.path.join(text_output_dir, 'scene_by_scene.txt')
-            with open(scene_script_path, 'w', encoding='utf-8') as f:
-                f.write(f"# {article.title} - Scene by Scene\n")
-                f.write(f"# Generated: {article.url.replace('story://created_', '').replace('_', ' ')}\n")
-                f.write(f"# Total Duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)\n\n")
-                
-                for scene in timeline:
-                    f.write(f"{'='*60}\n")
-                    f.write(f"SCENE {scene['scene']} ({scene.get('duration_seconds', 0)}s)\n")
-                    f.write(f"{'='*60}\n")
-                    f.write(f"TEXT TO SPEAK:\n{scene['text']}\n\n")
-                    f.write(f"VISUAL DESCRIPTION:\n{scene['description']}\n\n")
-                    f.write(f"USER SCENE: {'Yes' if scene.get('is_user_scene') else 'No'}\n\n")
+            # Create timeline summary
+            timeline_path = os.path.join(text_output_dir, 'timeline.json')
+            with open(timeline_path, 'w', encoding='utf-8') as f:
+                json.dump(timeline, f, indent=2)
             
-            print(f"✅ Images generated and styled!")
-            print(f"🎨 Raw images: {raw_image_count}")
-            print(f"🎭 Styled images: {styled_count}")
-            print(f"📁 Images saved to: instance/images/{article_id}/")
-            print(f"📄 Script files saved to: instance/text/{article_id}/")
-            print(f"   📝 Full script: {script_path}")
-            print(f"   🎬 Scene breakdown: {scene_script_path}")
+            print(f"💾 Saved script to: {script_path}")
+            print(f"💾 Saved timeline to: {timeline_path}")
             
-            print("\n🎯 NEXT STEP:")
-            print(f"   flask video-compose --article-id {article_id} --video-file \"path/to/your/video.mov\"")
+            total_images = len([s for s in timeline if s.get('themed_image_path') or s.get('stylized_image_path')])
+            print(f"📊 Final Results:")
+            print(f"   🎬 Timeline scenes: {len(timeline)}")
+            print(f"   🖼️  Images generated: {total_images}")
+            print(f"   💰 Cost mode: {'Direct integration' if no_kontext else 'Kontext styling'}")
+            
+            print(f"\n🎯 NEXT STEP:")
+            print(f"   flask video-compose --article-id {article_id} --video-file [your_video.mp4]")
             
         except Exception as e:
-            print(f"❌ Error approving timeline: {e}")
+            print(f"❌ Error in timeline approval: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    @click.command(name='generate-timeline-from-file')
+    @click.option('--file-path', required=True, type=str, help='Path to text file containing content for timeline generation.')
+    @click.option('--title', type=str, help='Optional title for the timeline (defaults to filename).')
+    @click.option('--preview-only', is_flag=True, help='Show timeline without saving to database.')
+    @click.option('--use-concepts', is_flag=True, help='Use concept-based timeline generation for better results.')
+    @click.option('--theme', type=click.Choice(FLUX_THEMES.keys()), help='Optional theme for concept-based generation.')
+    @with_appcontext
+    def generate_timeline_from_file_command(file_path, title, preview_only, use_concepts, theme):
+        """Generate timeline from any text file with optional concept-based analysis."""
+        from .text_processor import generate_timeline_from_file, generate_concept_based_timeline
+        import os
+        from datetime import datetime
+        
+        print(f"📄 Generating timeline from file: {file_path}")
+        print(f"🧠 Method: {'Concept-based analysis' if use_concepts else 'Standard segmentation'}")
+        if theme:
+            print(f"🎨 Theme: {theme}")
+        
+        # Verify file exists
+        if not os.path.exists(file_path):
+            print(f"❌ File not found: {file_path}")
+            return
+        
+        try:
+            if use_concepts:
+                # Read file content for concept analysis
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                
+                # Extract main content (skip metadata)
+                lines = content.split('\n')
+                content_start = 0
+                
+                for i, line in enumerate(lines):
+                    if line.strip() == '---' and i > 0:
+                        content_start = i + 1
+                        break
+                    elif line.strip() and not line.startswith('#') and not line.startswith('**'):
+                        content_start = i
+                        break
+                
+                main_content = '\n'.join(lines[content_start:]).strip()
+                
+                if len(main_content) < 100:
+                    print(f"❌ File content too short for concept analysis: {len(main_content)} characters")
+                    return
+                
+                # Generate concept-based timeline
+                timeline = generate_concept_based_timeline(main_content, theme)
+                
+            else:
+                # Use standard timeline generation
+                timeline = generate_timeline_from_file(file_path)
+            
+            # Calculate duration and statistics
+            total_scenes = len(timeline)
+            total_words = sum(len(scene.get('text', '').split()) for scene in timeline)
+            total_duration = sum(scene.get('duration_seconds', 0) for scene in timeline)
+            
+            print(f"\n✅ Timeline generated successfully!")
+            print(f"📊 Statistics:")
+            print(f"   🎬 Total scenes: {total_scenes}")
+            print(f"   📝 Total words: {total_words}")
+            print(f"   ⏱️  Total duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)")
+            
+            # Show timeline preview
+            print(f"\n📋 TIMELINE PREVIEW:")
+            print("="*80)
+            for scene in timeline:
+                duration = scene.get('duration_seconds', 0)
+                text_preview = scene.get('text', '')[:60] + "..." if len(scene.get('text', '')) > 60 else scene.get('text', '')
+                visual_preview = scene.get('description', '')[:50] + "..." if len(scene.get('description', '')) > 50 else scene.get('description', '')
+                
+                print(f"Scene {scene.get('scene', '?')} ({duration}s)")
+                print(f"  📝 Text: {text_preview}")
+                print(f"  🖼️  Visual: {visual_preview}")
+                if 'concept' in scene:
+                    print(f"  💡 Concept: {scene['concept']}")
+                print(f"  👤 User scene: {'Yes' if scene.get('is_user_scene') else 'No'}")
+                print()
+            
+            if not preview_only:
+                # Save timeline to database
+                if not title:
+                    title = f"Timeline from {os.path.basename(file_path)}"
+                
+                # Create a pseudo-article entry for file-based timelines
+                pseudo_article = NewsArticle(
+                    title=title,
+                    url=f"file://{file_path}",
+                    raw_content="",
+                    enhanced_content=open(file_path, 'r', encoding='utf-8').read(),
+                    timeline_json=timeline,
+                    workflow_phase='timeline_generated'
+                )
+                
+                db.session.add(pseudo_article)
+                db.session.commit()
+                
+                print(f"💾 Timeline saved to database as Article ID: {pseudo_article.id}")
+                print(f"🎯 NEXT STEPS:")
+                print(f"   # Standard approach:")
+                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name]")
+                print(f"   # Cost-effective approach:")
+                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name] --no-kontext")
+                print(f"   # Video composition:")
+                print(f"   flask video-compose --article-id {pseudo_article.id} --video-file [your_video.mp4]")
+                
+                return pseudo_article.id
+            else:
+                print("📋 Preview mode - timeline not saved to database")
+                print("💡 Remove --preview-only flag to save timeline and enable image generation")
+            
+        except Exception as e:
+            print(f"❌ Error generating timeline from file: {e}")
             import traceback
             traceback.print_exc()
 
@@ -2484,14 +2641,19 @@ def create_app(config_class=Config):
     @click.option('--file-path', required=True, type=str, help='Path to text file containing content for timeline generation.')
     @click.option('--title', type=str, help='Optional title for the timeline (defaults to filename).')
     @click.option('--preview-only', is_flag=True, help='Show timeline without saving to database.')
+    @click.option('--use-concepts', is_flag=True, help='Use concept-based timeline generation for better results.')
+    @click.option('--theme', type=click.Choice(FLUX_THEMES.keys()), help='Optional theme for concept-based generation.')
     @with_appcontext
-    def generate_timeline_from_file_command(file_path, title, preview_only):
-        """Generate timeline from any text file (bridges file-based content to timeline system)."""
-        from .text_processor import generate_timeline_from_file
+    def generate_timeline_from_file_command(file_path, title, preview_only, use_concepts, theme):
+        """Generate timeline from any text file with optional concept-based analysis."""
+        from .text_processor import generate_timeline_from_file, generate_concept_based_timeline
         import os
         from datetime import datetime
         
         print(f"📄 Generating timeline from file: {file_path}")
+        print(f"🧠 Method: {'Concept-based analysis' if use_concepts else 'Standard segmentation'}")
+        if theme:
+            print(f"🎨 Theme: {theme}")
         
         # Verify file exists
         if not os.path.exists(file_path):
@@ -2499,8 +2661,35 @@ def create_app(config_class=Config):
             return
         
         try:
-            # Generate timeline from file
-            timeline = generate_timeline_from_file(file_path)
+            if use_concepts:
+                # Read file content for concept analysis
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                
+                # Extract main content (skip metadata)
+                lines = content.split('\n')
+                content_start = 0
+                
+                for i, line in enumerate(lines):
+                    if line.strip() == '---' and i > 0:
+                        content_start = i + 1
+                        break
+                    elif line.strip() and not line.startswith('#') and not line.startswith('**'):
+                        content_start = i
+                        break
+                
+                main_content = '\n'.join(lines[content_start:]).strip()
+                
+                if len(main_content) < 100:
+                    print(f"❌ File content too short for concept analysis: {len(main_content)} characters")
+                    return
+                
+                # Generate concept-based timeline
+                timeline = generate_concept_based_timeline(main_content, theme)
+                
+            else:
+                # Use standard timeline generation
+                timeline = generate_timeline_from_file(file_path)
             
             # Calculate duration and statistics
             total_scenes = len(timeline)
@@ -2524,11 +2713,13 @@ def create_app(config_class=Config):
                 print(f"Scene {scene.get('scene', '?')} ({duration}s)")
                 print(f"  📝 Text: {text_preview}")
                 print(f"  🖼️  Visual: {visual_preview}")
+                if 'concept' in scene:
+                    print(f"  💡 Concept: {scene['concept']}")
                 print(f"  👤 User scene: {'Yes' if scene.get('is_user_scene') else 'No'}")
                 print()
             
             if not preview_only:
-                # Save timeline to database as a special "file-sourced" article
+                # Save timeline to database
                 if not title:
                     title = f"Timeline from {os.path.basename(file_path)}"
                 
@@ -2536,7 +2727,7 @@ def create_app(config_class=Config):
                 pseudo_article = NewsArticle(
                     title=title,
                     url=f"file://{file_path}",
-                    raw_content="",  # Not from news source
+                    raw_content="",
                     enhanced_content=open(file_path, 'r', encoding='utf-8').read(),
                     timeline_json=timeline,
                     workflow_phase='timeline_generated'
@@ -2547,7 +2738,11 @@ def create_app(config_class=Config):
                 
                 print(f"💾 Timeline saved to database as Article ID: {pseudo_article.id}")
                 print(f"🎯 NEXT STEPS:")
+                print(f"   # Standard approach:")
                 print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name]")
+                print(f"   # Cost-effective approach:")
+                print(f"   flask timeline-approve --article-id {pseudo_article.id} --theme [theme_name] --no-kontext")
+                print(f"   # Video composition:")
                 print(f"   flask video-compose --article-id {pseudo_article.id} --video-file [your_video.mp4]")
                 
                 return pseudo_article.id
@@ -2566,6 +2761,172 @@ def create_app(config_class=Config):
     app.cli.add_command(timeline_approve_command)
     app.cli.add_command(video_compose_command)
     app.cli.add_command(story_status_command)
+    
+    @click.command(name='test-concept-analysis')
+    @click.option('--file-path', required=True, type=str, help='Path to text file to analyze for concepts.')
+    @with_appcontext
+    def test_concept_analysis_command(file_path):
+        """Test concept analysis on a text file to see what concepts are identified."""
+        from .text_processor import analyze_content_concepts
+        import json
+        
+        print(f"🧠 Analyzing concepts in: {file_path}")
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            concepts = analyze_content_concepts(content)
+            
+            print("\n" + "="*60)
+            print("📋 CONCEPT ANALYSIS RESULTS")
+            print("="*60)
+            
+            for i, concept in enumerate(concepts, 1):
+                print(f"\n🎯 CONCEPT {i}: {concept.get('concept', 'Unknown')}")
+                print(f"   Themes: {', '.join(concept.get('themes', []))}")
+                print(f"   Visual Elements: {', '.join(concept.get('visual_elements', []))}")
+                print(f"   Key Phrases: {', '.join(concept.get('key_phrases', []))}")
+            
+            print(f"\n✅ Found {len(concepts)} key concepts for visual representation")
+            
+        except FileNotFoundError:
+            print(f"❌ File not found: {file_path}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+    
+    @click.command(name='preview-concept-timeline')
+    @click.option('--file-path', required=True, type=str, help='Path to text file to generate timeline from.')
+    @click.option('--theme', default=None, help='Theme to apply (e.g., "film_noir", "cyberpunk")')
+    @click.option('--show-prompts', is_flag=True, help='Show detailed image prompts that will be sent to API')
+    @with_appcontext
+    def preview_concept_timeline_command(file_path, theme, show_prompts):
+        """Preview concept-based timeline generation with actual image prompts."""
+        from .text_processor import generate_concept_based_timeline
+        import json
+        
+        print(f"🎬 Generating concept timeline for: {file_path}")
+        if theme:
+            print(f"🎨 Using theme: {theme}")
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            timeline = generate_concept_based_timeline(content, theme)
+            
+            print("\n" + "="*80)
+            print("🎬 CONCEPT-BASED TIMELINE PREVIEW")
+            print("="*80)
+            
+            total_duration = 0
+            
+            for scene in timeline:
+                scene_num = scene.get('scene', '?')
+                text = scene.get('text', '')
+                concept = scene.get('concept', 'Unknown')
+                description = scene.get('description', '')
+                image_prompt = scene.get('image_prompt', '')
+                generation_mode = scene.get('generation_mode', 'unknown')
+                duration = scene.get('duration_seconds', 0)
+                word_count = scene.get('word_count', 0)
+                is_user = scene.get('is_user_scene', False)
+                
+                total_duration += duration
+                
+                print(f"\n🎬 SCENE {scene_num} ({duration}s, {word_count} words)")
+                print(f"🏷️  Concept: {concept}")
+                print(f"👤 User Scene: {'Yes' if is_user else 'No'}")
+                print(f"📝 Text: {text}")
+                print(f"🎨 Visual Description: {description}")
+                
+                if show_prompts or True:  # Always show prompts for now
+                    print(f"🤖 IMAGE PROMPT: {image_prompt}")
+                    print(f"⚙️  Generation Mode: {generation_mode}")
+                
+                print("-" * 60)
+            
+            print(f"\n📊 TIMELINE SUMMARY:")
+            print(f"   Total Scenes: {len(timeline)}")
+            print(f"   Total Duration: {total_duration:.1f} seconds")
+            print(f"   Average Scene Length: {total_duration/len(timeline):.1f} seconds")
+            
+            if theme:
+                print(f"   Theme Integration: {timeline[0].get('generation_mode', 'unknown')}")
+            
+        except FileNotFoundError:
+            print(f"❌ File not found: {file_path}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+    @click.command(name='compare-timelines')
+    @click.option('--file-path', required=True, type=str, help='Path to text file to compare timeline methods.')
+    @click.option('--theme', default=None, help='Theme to apply to both timelines')
+    @with_appcontext
+    def compare_timelines_command(file_path, theme):
+        """Compare standard vs concept-based timeline generation."""
+        from .text_processor import generate_timeline, generate_concept_based_timeline, add_image_prompts_to_timeline
+        
+        print(f"⚖️  Comparing timeline methods for: {file_path}")
+        if theme:
+            print(f"🎨 Using theme: {theme}")
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Generate both types
+            standard_timeline = generate_timeline(content)
+            standard_timeline = add_image_prompts_to_timeline(standard_timeline, theme)
+            
+            concept_timeline = generate_concept_based_timeline(content, theme)
+            
+            print("\n" + "="*80)
+            print("📊 TIMELINE COMPARISON")
+            print("="*80)
+            
+            print(f"\n📏 METRICS:")
+            print(f"   Standard Timeline: {len(standard_timeline)} scenes")
+            print(f"   Concept Timeline:  {len(concept_timeline)} scenes")
+            
+            standard_duration = sum(s.get('duration_seconds', 0) for s in standard_timeline)
+            concept_duration = sum(s.get('duration_seconds', 0) for s in concept_timeline)
+            
+            print(f"   Standard Duration: {standard_duration:.1f} seconds")
+            print(f"   Concept Duration:  {concept_duration:.1f} seconds")
+            
+            print(f"\n🎬 FIRST 3 SCENES COMPARISON:")
+            
+            for i in range(min(3, len(standard_timeline), len(concept_timeline))):
+                print(f"\n--- SCENE {i+1} ---")
+                
+                # Standard
+                std_scene = standard_timeline[i]
+                print(f"📺 STANDARD ({std_scene.get('duration_seconds', 0)}s):")
+                print(f"   Text: {std_scene.get('text', '')}")
+                print(f"   Prompt: {std_scene.get('image_prompt', std_scene.get('description', ''))}")
+                
+                # Concept
+                con_scene = concept_timeline[i]
+                print(f"🧠 CONCEPT ({con_scene.get('duration_seconds', 0)}s):")
+                print(f"   Text: {con_scene.get('text', '')}")
+                print(f"   Concept: {con_scene.get('concept', 'Unknown')}")
+                print(f"   Prompt: {con_scene.get('image_prompt', con_scene.get('description', ''))}")
+                
+        except FileNotFoundError:
+            print(f"❌ File not found: {file_path}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+    # Register all commands
+    app.cli.add_command(story_create_command)
+    app.cli.add_command(script_generate_command)
+    app.cli.add_command(timeline_approve_command)
+    app.cli.add_command(video_compose_command)
+    app.cli.add_command(story_status_command)
+    app.cli.add_command(test_concept_analysis_command)
+    app.cli.add_command(preview_concept_timeline_command)
+    app.cli.add_command(compare_timelines_command)
     
     # Register collaborative workflow commands
     app.cli.add_command(discover_story_command)

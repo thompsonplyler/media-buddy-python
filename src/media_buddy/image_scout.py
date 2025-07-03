@@ -3,6 +3,7 @@ import random
 import replicate
 import os
 import requests
+from typing import Optional
 
 # The user-provided template for generating high-quality prompts.
 PROMPT_TEMPLATE = "photorealistic cinematic photo of {subject}, dynamic camera angle, shot by FujifilmXT, 85mm, f/2.2"
@@ -18,6 +19,110 @@ def generate_rich_image_prompt(scene_description: str) -> str:
         str: A fully formatted, detailed prompt for an image generator.
     """
     return PROMPT_TEMPLATE.format(subject=scene_description)
+
+def generate_themed_image_prompt(scene_description: str, theme_style: str) -> str:
+    """
+    Generates a rich image prompt with theme integration for direct generation.
+    This avoids the expensive kontext step by building the theme into the initial prompt.
+    
+    Args:
+        scene_description (str): The core visual concept
+        theme_style (str): The theme styling to integrate
+        
+    Returns:
+        str: A themed prompt ready for direct image generation
+    """
+    # Blend the theme naturally into the scene description
+    themed_prompt = f"{scene_description}, {theme_style}"
+    return themed_prompt
+
+def generate_concept_image(
+    concept_description: str, 
+    theme: Optional[str] = None,
+    article_id: int = 0, 
+    scene_number: int = 0, 
+    is_user_scene: bool = False,
+    use_kontext: bool = True
+) -> str | None:
+    """
+    Generates images using concept-based descriptions with optional theme integration.
+    
+    Args:
+        concept_description: Rich visual description of the concept
+        theme: Optional theme name to integrate
+        article_id: Article ID for file organization
+        scene_number: Scene number for file naming
+        is_user_scene: Whether this features the user personally
+        use_kontext: Whether to use expensive kontext styling (default True for backwards compatibility)
+        
+    Returns:
+        Path to generated image or None if failed
+    """
+    logging.info(f"Generating concept image for article {article_id}, scene {scene_number}")
+    
+    output_dir = os.path.join('instance', 'images', str(article_id))
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if theme and not use_kontext:
+        # Direct theme integration - cost-effective approach
+        from .themes import FLUX_THEMES
+        theme_style = FLUX_THEMES.get(theme, "")
+        final_prompt = generate_themed_image_prompt(concept_description, theme_style)
+        output_path = os.path.join(output_dir, f"scene_{scene_number}_themed.png")
+        
+        logging.info(f"Using direct theme integration: {theme}")
+    else:
+        # Standard generation (with potential kontext styling later)
+        final_prompt = concept_description
+        output_path = os.path.join(output_dir, f"scene_{scene_number}.webp")
+    
+    model_name = "black-forest-labs/flux-dev"
+    input_payload = {
+        "prompt": final_prompt,
+        "aspect_ratio": "4:5",
+        "guidance": 3.5,
+        "output_format": "png" if theme and not use_kontext else "webp"
+    }
+
+    if is_user_scene:
+        logging.info("User-centric scene detected. Switching to specialized model.")
+        user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+        
+        if theme and not use_kontext:
+            # Integrate user trigger with themed prompt
+            final_prompt = f"{user_trigger}, {final_prompt}"
+        else:
+            # Standard user prompt with template
+            final_prompt = PROMPT_TEMPLATE.format(subject=f"{user_trigger} {concept_description}")
+
+        model_name = "thompsonplyler/thompsonplyler_flux_v3_thmpsnplylr:e45e257ecbf18f9fb4484009c86b6a759e3529eaeae3d4fb90636adbb6e00b2e"
+        input_payload["prompt"] = final_prompt
+        input_payload["lora_scale"] = 1
+        input_payload["guidance_scale"] = 3
+        input_payload["num_inference_steps"] = 28
+
+    try:
+        logging.info(f"Generating image with prompt: {final_prompt}")
+        
+        output = replicate.run(model_name, input=input_payload)
+        
+        if isinstance(output, list) and len(output) > 0:
+            image_url = output[0]
+        else:
+            image_url = output
+        
+        response = requests.get(image_url)
+        response.raise_for_status()
+        
+        with open(output_path, 'wb') as f:
+            f.write(response.content)
+        
+        logging.info(f"Successfully saved image to {output_path}")
+        return output_path
+        
+    except Exception as e:
+        logging.error(f"Error generating concept image: {e}")
+        return None
 
 def source_image_for_scene(scene_description: str) -> dict:
     """
