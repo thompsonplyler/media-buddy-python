@@ -11,7 +11,7 @@ from pathlib import Path
 # Correct the path to allow for absolute imports from 'src'
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from src.media_buddy.config import Config
+from src.media_buddy.config import Config, USER, USER_PROMPT
 from src.media_buddy.extensions import db, migrate
 from src.media_buddy.models import NewsArticle
 from src.media_buddy.services.legacy_adapter import fetch_articles
@@ -819,7 +819,7 @@ def create_app(config_class=Config):
     @click.option('--top-articles', default=3, type=int, help='Number of top articles to synthesize from.')
     @with_appcontext
     def generate_voice_response_command(query, length, top_articles):
-        """Generates Thompson's response to the top articles on a given topic."""
+        """Generates the user's response to the top articles on a given topic."""
         
         print(f"🔍 Finding top {top_articles} articles for query: '{query}'")
         
@@ -887,38 +887,27 @@ def create_app(config_class=Config):
             print(f"  {i}. {article.title[:60]}... ({len(article.raw_content)} chars, score: {score})")
         
         try:
-            # Generate Thompson's response to the combined articles
-            voice_response = generate_voiced_response_from_articles(quality_articles, query, length)
-            
-            # Save to private/writing_style_samples/test/ with logical filename
-            output_dir = os.path.join('private', 'writing_style_samples', 'test')
-            os.makedirs(output_dir, exist_ok=True)
-            
-            # Create filename from query and date
-            from datetime import datetime
-            safe_query = "".join(c for c in query if c.isalnum() or c in (' ', '-')).rstrip()
-            safe_query = safe_query.replace(' ', '-').lower()
-            timestamp = datetime.now().strftime('%Y-%m-%d')
-            filename = f"{safe_query}-{timestamp}.md"
-            filepath = os.path.join(output_dir, filename)
-            
-            # Save the response
+            # Generate the user's response to the combined articles
+            voiced_response = generate_voiced_response_from_articles(articles, query, length)
+
+            # Save to enhanced_scripts directory with timestamped filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            script_dir = os.path.join(private_dir, 'writing_style_samples', 'output', 'enhanced_scripts')
+            os.makedirs(script_dir, exist_ok=True)
+            filename = f"news_response_{timestamp}_{query.replace(' ', '_')[:30]}.txt"
+            filepath = os.path.join(script_dir, filename)
+
             with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(f"# Thompson's Response: {query}\n\n")
-                f.write(f"*Generated from {len(quality_articles)} articles on {timestamp}*\n\n")
+                f.write(f"# {USER}'s Response: {query}\n\n")
+                f.write(f"Query: {query}\n")
+                f.write(f"Length: {length} words\n")
+                f.write(f"Articles: {len(articles)}\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 f.write("---\n\n")
-                f.write(voice_response)
-                f.write("\n\n---\n\n")
-                f.write("## Source Articles:\n\n")
-                for i, article in enumerate(quality_articles, 1):
-                    f.write(f"{i}. **{article.title}**\n")
-                    f.write(f"   - URL: {article.url}\n")
-                    f.write(f"   - Content: {len(article.raw_content)} characters\n\n")
-            
-            print(f"\n💾 Saved Thompson's 60-second script to: {filepath}")
-            print("\n--- THOMPSON'S SCRIPT (60 SECONDS) ---")
-            print(voice_response)
-            print("--- END SCRIPT ---")
+                f.write(voiced_response)
+
+            print(f"\n💾 Saved {USER}'s 60-second script to: {filepath}")
+            print(f"\n--- {USER.upper()}'S SCRIPT (60 SECONDS) ---")
             
             # Return the filepath for potential chaining
             return filepath
@@ -1045,7 +1034,7 @@ def create_app(config_class=Config):
     @click.argument('topic')
     @with_appcontext
     def record_edit_command(original_script_file, edited_script_file, topic):
-        """Record an edit session to learn Thompson's style preferences."""
+        """Record an edit session to learn the user's style preferences."""
         
         try:
             # Read both scripts
@@ -1106,7 +1095,7 @@ def create_app(config_class=Config):
     @click.command(name='style-insights')
     @with_appcontext
     def style_insights_command():
-        """Show learned patterns from Thompson's editing history."""
+        """Show learned patterns from the user's editing history."""
         
         try:
             # Check if we have any learning data
@@ -2572,12 +2561,9 @@ def create_app(config_class=Config):
     @click.option('--output-file', type=str, help='Custom output filename (without extension).')
     @with_appcontext
     def voice_respond_command(query, context_file, length, output_file):
-        """Generate Thompson's response to a query, optionally using context content."""
-        from .text_processor import generate_voiced_response_to_query
-        import os
-        from datetime import datetime
+        """Generate the user's response to a query, optionally using context content."""
         
-        print(f"🤖 Generating Thompson's response to: '{query}'")
+        print(f"🤖 Generating {USER}'s response to: '{query}'")
         
         context_content = None
         if context_file:
@@ -2596,7 +2582,7 @@ def create_app(config_class=Config):
                 print(f"✅ Loaded {len(context_content)} characters of context")
         
         try:
-            # Generate Thompson's response
+            # Generate the user's response
             response = generate_voiced_response_to_query(query, context_content, length)
             
             # Create output directory
@@ -2617,18 +2603,16 @@ def create_app(config_class=Config):
             
             # Save the response
             with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(f"# Thompson's Response\n\n")
-                f.write(f"**Query:** {query}\n\n")
-                if context_content:
-                    f.write(f"**Context Used:** {os.path.basename(context_file) if context_file else 'None'}\n\n")
-                f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                f.write(f"**Word Count:** ~{len(response.split())} words\n\n")
+                f.write(f"# {USER}'s Response: {query}\n\n")
+                f.write(f"Query: {query}\n")
+                f.write(f"Length: {length} words\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 f.write("---\n\n")
                 f.write(response)
             
             print(f"\n✅ Response generated and saved to: {filepath}")
             print(f"📊 Word count: ~{len(response.split())} words")
-            print("\n--- THOMPSON'S RESPONSE ---")
+            print("\n--- {USER.upper()}'S RESPONSE ---")
             print(response)
             print("--- END RESPONSE ---")
             

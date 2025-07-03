@@ -7,6 +7,7 @@ from sentence_transformers import SentenceTransformer
 import torch
 import google.generativeai as genai
 from .models import NewsArticle
+from .config import USER, USER_PROMPT
 from typing import List, Dict, Optional
 
 # --- Hugging Face Authentication ---
@@ -175,7 +176,7 @@ def generate_timeline(text: str) -> list[dict]:
             is_user_scene = scene.get('is_user_scene', False)
             
             if is_user_scene:
-                user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                user_trigger = USER_PROMPT
                 # For user scenes, naturally integrate the user trigger
                 if description.startswith("A person") or description.startswith("A man"):
                     # Replace generic person reference with specific user trigger
@@ -278,13 +279,13 @@ def generate_voiced_summary_from_content(content: str, length: int) -> str:
         length: Target word count for the voiced summary
         
     Returns:
-        A voiced summary in Thompson's style
+        A voiced summary in the user's style
     """
     return generate_voiced_summary_from_raw_content(content, length)
 
 def generate_voiced_summary_from_raw_content(raw_content: str, length: int) -> str:
     """
-    Generates Thompson's response to a full news article, as if he read the entire piece.
+    Generates the user's response to a full news article, as if they read the entire piece.
     This bypasses intermediate summarization to preserve nuance and allow for thoughtful commentary.
 
     Args:
@@ -292,7 +293,7 @@ def generate_voiced_summary_from_raw_content(raw_content: str, length: int) -> s
         length: The target word count for the response.
 
     Returns:
-        Thompson's response in his writing voice.
+        The user's response in their writing voice.
     """
     if not raw_content or len(raw_content.strip()) < 100:
         raise ValueError("Raw content must be substantial for voice response generation.")
@@ -303,29 +304,29 @@ def generate_voiced_summary_from_raw_content(raw_content: str, length: int) -> s
     writing_style = get_writing_style_examples()
 
     prompt = f"""
-    You are Thompson, and you've just finished reading a news article. Your task is to write your response to this article in your distinctive voice and style, as if you're commenting on it or sharing your thoughts about it with others.
+    You are {USER}, and you've just finished reading a news article. Your task is to write your response to this article in your distinctive voice and style, as if you're commenting on it or sharing your thoughts about it with others.
 
     **CRITICAL INSTRUCTION: This is not a summary.**
     - **DO NOT** simply rewrite or summarize the article
-    - **DO** respond to it as Thompson would - with your own perspective, analysis, commentary, or reaction
-    - **DO** capture Thompson's unique writing style: tone, sentence structure, vocabulary, analogies, and way of thinking
+    - **DO** respond to it as {USER} would - with your own perspective, analysis, commentary, or reaction
+    - **DO** capture {USER}'s unique writing style: tone, sentence structure, vocabulary, analogies, and way of thinking
     - **DO** feel free to agree, disagree, add context, or provide your own insights about the topic
     - **DO NOT** copy specific unrelated proper nouns from your style guide unless they're genuinely relevant
 
-    Your response should feel like Thompson just read this article and is now sharing his thoughts about it.
+    Your response should feel like {USER} just read this article and is now sharing his thoughts about it.
 
-    **Thompson's Writing Style Guide:**
+    **{USER}'s Writing Style Guide:**
     ---
     {writing_style}
     ---
 
-    **Article Thompson Just Read:**
+    **Article {USER} Just Read:**
     ---
     {raw_content}
     ---
 
     **Your Task:**
-    Write Thompson's response to this article in approximately {length} words. This should be his commentary, analysis, or reaction - not a summary. Write as if Thompson is speaking directly to his audience about what he just read.
+    Write {USER}'s response to this article in approximately {length} words. This should be his commentary, analysis, or reaction - not a summary. Write as if {USER} is speaking directly to his audience about what he just read.
     """
 
     response = model.generate_content(prompt)
@@ -333,7 +334,7 @@ def generate_voiced_summary_from_raw_content(raw_content: str, length: int) -> s
 
 def generate_voiced_response_from_articles(articles: list, topic: str, length: int) -> str:
     """
-    Generates Thompson's response to multiple articles on the same topic.
+    Generates the user's response to multiple articles on the same topic.
     Synthesizes insights from all articles rather than responding to just one.
 
     Args:
@@ -342,7 +343,7 @@ def generate_voiced_response_from_articles(articles: list, topic: str, length: i
         length: Target word count for the response
 
     Returns:
-        Thompson's synthesized response across all articles
+        The user's synthesized response across all articles
     """
     if not articles:
         raise ValueError("At least one article required for synthesis.")
@@ -363,20 +364,20 @@ def generate_voiced_response_from_articles(articles: list, topic: str, length: i
     writing_style = get_writing_style_examples()
 
     prompt = f"""
-    You are Thompson, and you're about to record a 60-second spoken summary about "{topic}". This is a script to be read aloud, so it should sound natural and conversational when spoken.
+    You are {USER}, and you're about to record a 60-second spoken summary about "{topic}". This is a script to be read aloud, so it should sound natural and conversational when spoken.
 
     **CRITICAL INSTRUCTIONS:**
     - **DO NOT** mention articles, sources, or reading anything - speak about the situation directly
     - **DO** synthesize all the key information into one cohesive narrative about the situation
-    - **DO** write in Thompson's distinctive voice and style from the style guide
-    - **DO** make it sound like Thompson is speaking directly to his audience about what's happening
+    - **DO** write in {USER}'s distinctive voice and style from the style guide
+    - **DO** make it sound like {USER} is speaking directly to his audience about what's happening
     - **DO** keep it to approximately 150-180 words (60 seconds of speaking)
     - **DO NOT** use phrases like "according to reports" or "articles suggest" - speak as if you know what's happening
     - **DO NOT** copy specific unrelated proper nouns from your style guide
 
-    This should sound like Thompson giving his take on the current situation regarding "{topic}" - informed, conversational, and in his unique voice.
+    This should sound like {USER} giving his take on the current situation regarding "{topic}" - informed, conversational, and in his unique voice.
 
-    **Thompson's Writing Style Guide:**
+    **{USER}'s Writing Style Guide:**
     ---
     {writing_style}
     ---
@@ -387,7 +388,7 @@ def generate_voiced_response_from_articles(articles: list, topic: str, length: i
     ---
 
     **Your Task:**
-    Write Thompson's 60-second spoken script about the "{topic}" situation in approximately 150-180 words. This should be his direct commentary on what's happening, written to be read aloud naturally. Focus on the key developments and Thompson's perspective on the situation.
+    Write {USER}'s 60-second spoken script about the "{topic}" situation in approximately 150-180 words. This should be his direct commentary on what's happening, written to be read aloud naturally. Focus on the key developments and {USER}'s perspective on the situation.
     """
 
     response = model.generate_content(prompt)
@@ -395,7 +396,7 @@ def generate_voiced_response_from_articles(articles: list, topic: str, length: i
 
 def generate_voiced_story_from_user_and_news(user_story: str, news_content: str, length: int) -> str:
     """
-    Generates Thompson's enhanced story by combining user's preliminary story with news articles.
+    Generates the user's enhanced story by combining user's preliminary story with news articles.
     This is designed for the streamlined story workflow.
 
     Args:
@@ -404,7 +405,7 @@ def generate_voiced_story_from_user_and_news(user_story: str, news_content: str,
         length: Target word count for the enhanced story
 
     Returns:
-        Thompson's enhanced version combining both sources
+        The user's enhanced version combining both sources
     """
     if not user_story or len(user_story.strip()) < 50:
         raise ValueError("User story must be substantial for enhancement.")
@@ -418,21 +419,21 @@ def generate_voiced_story_from_user_and_news(user_story: str, news_content: str,
     writing_style = get_writing_style_examples()
 
     prompt = f"""
-    You are Thompson, and you're creating an enhanced script by combining your user's preliminary story with relevant news information. Your task is to weave these elements together into a cohesive narrative in your distinctive voice.
+    You are {USER}, and you're creating an enhanced script by combining your user's preliminary story with relevant news information. Your task is to weave these elements together into a cohesive narrative in your distinctive voice.
 
     **CRITICAL INSTRUCTIONS:**
     - **DO** use the user's story as the foundation and primary narrative thread
     - **DO** enhance it with relevant details, context, and insights from the news sources  
-    - **DO** write in Thompson's distinctive voice and style from the style guide
-    - **DO** create a seamless narrative that sounds like Thompson telling a complete story
-    - **DO** maintain the user's core ideas while adding Thompson's perspective and analysis
+    - **DO** write in {USER}'s distinctive voice and style from the style guide
+    - **DO** create a seamless narrative that sounds like {USER} telling a complete story
+    - **DO** maintain the user's core ideas while adding {USER}'s perspective and analysis
     - **DO NOT** simply concatenate the sources - blend them thoughtfully
     - **DO NOT** copy specific unrelated proper nouns from your style guide
     - **DO** make it feel like a cohesive script to be read aloud
 
-    This should sound like Thompson took the user's preliminary ideas and crafted them into a complete, enhanced narrative with supporting context from current events.
+    This should sound like {USER} took the user's preliminary ideas and crafted them into a complete, enhanced narrative with supporting context from current events.
 
-    **Thompson's Writing Style Guide:**
+    **{USER}'s Writing Style Guide:**
     ---
     {writing_style}
     ---
@@ -448,7 +449,7 @@ def generate_voiced_story_from_user_and_news(user_story: str, news_content: str,
     ---
 
     **Your Task:**
-    Create Thompson's enhanced script in approximately {length} words by thoughtfully combining the user's story with relevant news context. This should be a cohesive narrative that builds on the user's foundation while adding Thompson's distinctive voice and insights.
+    Create {USER}'s enhanced script in approximately {length} words by thoughtfully combining the user's story with relevant news context. This should be a cohesive narrative that builds on the user's foundation while adding {USER}'s distinctive voice and insights.
     """
 
     response = model.generate_content(prompt)
@@ -456,16 +457,16 @@ def generate_voiced_story_from_user_and_news(user_story: str, news_content: str,
 
 def generate_voiced_response_to_query(query: str, context_content: str = None, length: int = 250) -> str:
     """
-    Generates Thompson's response to a query, optionally using context content as background.
+    Generates the user's response to a query, optionally using context content as background.
     This is designed for standalone voice responses to prompts.
 
     Args:
         query: The question or prompt to respond to
-        context_content: Optional existing Thompson content to use as context
+        context_content: Optional existing user content to use as context
         length: Target word count for the response
 
     Returns:
-        Thompson's response in his distinctive voice
+        The user's response in their distinctive voice
     """
     if not query or len(query.strip()) < 10:
         raise ValueError("Query must be substantial for response generation.")
@@ -478,25 +479,25 @@ def generate_voiced_response_to_query(query: str, context_content: str = None, l
     # Build prompt based on whether context is provided
     if context_content and len(context_content.strip()) > 20:
         prompt = f"""
-        You are Thompson. You've previously written or said the content provided in the "Context" section below. Now you're being asked a new question or prompt. Your task is to respond to this new query in your distinctive voice, building naturally on your previous thoughts if relevant.
+        You are {USER}. You've previously written or said the content provided in the "Context" section below. Now you're being asked a new question or prompt. Your task is to respond to this new query in your distinctive voice, building naturally on your previous thoughts if relevant.
 
         **CRITICAL INSTRUCTIONS:**
-        - **DO** respond to the query as Thompson would - with your perspective, analysis, and distinctive voice
+        - **DO** respond to the query as {USER} would - with your perspective, analysis, and distinctive voice
         - **DO** reference your previous context if it's relevant to the current query
-        - **DO** write in Thompson's unique style: tone, sentence structure, vocabulary, analogies, and way of thinking
+        - **DO** write in {USER}'s unique style: tone, sentence structure, vocabulary, analogies, and way of thinking
         - **DO** make this feel like a natural continuation of your thoughts, not a forced connection
         - **DO NOT** copy specific unrelated proper nouns from your style guide unless genuinely relevant
         - **DO NOT** simply repeat the context - build on it to answer the new query
         - **DO** feel free to agree, disagree, add new insights, or take the conversation in new directions
 
-        This should sound like Thompson naturally responding to a new question, informed by his previous thoughts.
+        This should sound like {USER} naturally responding to a new question, informed by his previous thoughts.
 
-        **Thompson's Writing Style Guide:**
+        **{USER}'s Writing Style Guide:**
         ---
         {writing_style}
         ---
 
-        **Context (Thompson's Previous Thoughts):**
+        **Context ({USER}'s Previous Thoughts):**
         ---
         {context_content}
         ---
@@ -507,22 +508,22 @@ def generate_voiced_response_to_query(query: str, context_content: str = None, l
         ---
 
         **Your Task:**
-        Write Thompson's response to the query in approximately {length} words. This should be his natural response, building on his previous context where relevant, written in his distinctive voice.
+        Write {USER}'s response to the query in approximately {length} words. This should be his natural response, building on his previous context where relevant, written in his distinctive voice.
         """
     else:
         prompt = f"""
-        You are Thompson, and you're responding to a question or prompt. Your task is to write your response in your distinctive voice and style, as if you're sharing your thoughts with your audience.
+        You are {USER}, and you're responding to a question or prompt. Your task is to write your response in your distinctive voice and style, as if you're sharing your thoughts with your audience.
 
         **CRITICAL INSTRUCTIONS:**
-        - **DO** respond to the query as Thompson would - with your perspective, analysis, and distinctive voice
-        - **DO** write in Thompson's unique style: tone, sentence structure, vocabulary, analogies, and way of thinking
+        - **DO** respond to the query as {USER} would - with your perspective, analysis, and distinctive voice
+        - **DO** write in {USER}'s unique style: tone, sentence structure, vocabulary, analogies, and way of thinking
         - **DO** feel free to agree, disagree, provide insights, or take the conversation in interesting directions
         - **DO NOT** copy specific unrelated proper nouns from your style guide unless genuinely relevant
-        - **DO** make this feel like Thompson naturally responding to the prompt
+        - **DO** make this feel like {USER} naturally responding to the prompt
 
-        This should sound like Thompson sharing his authentic thoughts on the topic.
+        This should sound like {USER} sharing his authentic thoughts on the topic.
 
-        **Thompson's Writing Style Guide:**
+        **{USER}'s Writing Style Guide:**
         ---
         {writing_style}
         ---
@@ -533,7 +534,7 @@ def generate_voiced_response_to_query(query: str, context_content: str = None, l
         ---
 
         **Your Task:**
-        Write Thompson's response to this query in approximately {length} words. This should be his natural response, written in his distinctive voice and style.
+        Write {USER}'s response to this query in approximately {length} words. This should be his natural response, written in his distinctive voice and style.
         """
 
     response = model.generate_content(prompt)
@@ -756,7 +757,7 @@ def generate_concept_based_timeline(text: str, theme: Optional[str] = None) -> L
             if theme and theme_style:
                 # Direct theme integration with T5-style natural language
                 if is_user_scene:
-                    user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                    user_trigger = USER_PROMPT
                     # For user scenes, naturally integrate the user trigger into the T5 description
                     if description.startswith("A person") or description.startswith("A man"):
                         # Replace generic person reference with specific user trigger
@@ -774,7 +775,7 @@ def generate_concept_based_timeline(text: str, theme: Optional[str] = None) -> L
             else:
                 # Standard generation using T5-style descriptions directly
                 if is_user_scene:
-                    user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                    user_trigger = USER_PROMPT
                     # For user scenes, naturally integrate the user trigger
                     if description.startswith("A person") or description.startswith("A man"):
                         # Replace generic person reference with specific user trigger
@@ -822,7 +823,7 @@ def add_image_prompts_to_timeline(timeline: List[Dict], theme: Optional[str] = N
         if theme and theme_style:
             # Direct theme integration with T5-style natural language
             if is_user_scene:
-                user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                user_trigger = USER_PROMPT
                 # For user scenes, naturally integrate the user trigger into the T5 description
                 if description.startswith("A person") or description.startswith("A man"):
                     # Replace generic person reference with specific user trigger
@@ -840,7 +841,7 @@ def add_image_prompts_to_timeline(timeline: List[Dict], theme: Optional[str] = N
         else:
             # Standard generation using T5-style descriptions directly
             if is_user_scene:
-                user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+                user_trigger = USER_PROMPT
                 # For user scenes, naturally integrate the user trigger
                 if description.startswith("A person") or description.startswith("A man"):
                     # Replace generic person reference with specific user trigger

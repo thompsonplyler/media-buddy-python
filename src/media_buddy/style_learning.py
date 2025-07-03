@@ -1,5 +1,5 @@
 """
-Style Learning System - Captures and learns from Thompson's edits to improve future outputs.
+Style Learning System - Captures and learns from the user's edits to improve future outputs.
 """
 
 import os
@@ -13,7 +13,7 @@ from pathlib import Path
 
 class StyleLearningSystem:
     """
-    Learns from Thompson's editing patterns to improve future voice generation.
+    Learns from the user's editing patterns to improve future voice generation.
     """
     
     def __init__(self, learning_dir: str = "private/style_learning"):
@@ -45,7 +45,7 @@ class StyleLearningSystem:
         
         Args:
             original_script: The AI-generated script
-            edited_script: Thompson's edited version
+            edited_script: the user's edited version
             topic: The topic/query that generated this script
             context: Additional context (article sources, etc.)
             

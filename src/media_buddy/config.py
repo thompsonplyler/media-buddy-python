@@ -46,6 +46,10 @@ OBSIDIAN_LOG_PATH = os.getenv('OBSIDIAN_LOG_PATH')
 DATABASE_URL = os.environ.get('DATABASE_URL') or \
     'sqlite:///app.db'
 
+# --- User Configuration ---
+USER = os.getenv('USER', 'User')  # Default to 'User' if not set
+USER_PROMPT = os.getenv('USER_PROMPT', 'A person')  # Default to 'A person' if not set
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
     SQLALCHEMY_DATABASE_URI = DATABASE_URL

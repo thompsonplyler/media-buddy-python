@@ -3,6 +3,7 @@ import random
 import replicate
 import os
 import requests
+from .config import USER_PROMPT
 from typing import Optional
 
 # The user-provided template for generating high-quality prompts.
@@ -86,7 +87,7 @@ def generate_concept_image(
 
     if is_user_scene:
         logging.info("User-centric scene detected. Switching to specialized model.")
-        user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+        user_trigger = USER_PROMPT
         
         if theme and not use_kontext:
             # Integrate user trigger with themed prompt
@@ -171,7 +172,7 @@ def generate_raw_image(prompt: str, article_id: int, scene_number: int, is_user_
 
     if is_user_scene:
         logging.info("User-centric scene detected. Switching to specialized model.")
-        user_trigger = "thmpsnplylr, a white man in his mid-40s with messy brown hair"
+        user_trigger = USER_PROMPT
         # The PROMPT_TEMPLATE expects a {subject}, so we format it correctly
         final_prompt = PROMPT_TEMPLATE.format(subject=f"{user_trigger} {prompt}")
 

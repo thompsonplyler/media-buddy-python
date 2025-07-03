@@ -1,307 +1,336 @@
 # Media Buddy - Project Summary & Lessons Learned
 
-## Project Goal
+## Project Overview
 
-"Media Buddy" is a Flask-based application designed to build a 7-step pipeline that transforms news articles into various media formats. This project is a spiritual successor to "job-commando" and aims to leverage lessons learned from previous development cycles.
+**Media Buddy** is a Flask-based AI-powered content generation pipeline that transforms news articles and user prompts into personalized multimedia content. The system preserves the user's authentic writing voice while generating professional video presentations with synchronized audio, visuals, and text.
 
-The core pipeline is:
+### Core Architecture
 
-1.  Fetch news articles from an API.
-2.  Process and store the articles, including generating text summaries and vector embeddings.
-3.  (Future steps to be defined)
+**7-Step Pipeline:**
 
----
+1. **Content Discovery**: News articles or direct prompts
+2. **Content Acquisition**: Full article extraction via Archive.is/Playwright
+3. **Voice Generation**: AI-enhanced writing in Thompson's authentic voice
+4. **Timeline Creation**: Visual scene breakdown with timing analysis
+5. **Image Generation**: Theme-based stylized visuals using FLUX models
+6. **Video Composition**: Professional video assembly with layout control
+7. **Media Assembly**: Final multimedia package delivery
 
-## Lessons Learned & Troubleshooting Guide
+### Technology Stack
 
-This section is crucial for guiding future development and for onboarding new developers (or reminding our future selves) of the non-obvious challenges we've already solved.
+- **Backend**: Flask + SQLAlchemy + PostgreSQL with pgvector
+- **AI Services**: Google Gemini (text), Replicate FLUX (images)
+- **Content Acquisition**: Playwright, Archive.is, Google News RSS
+- **Media Processing**: FFmpeg, PIL/Pillow
+- **Infrastructure**: Modular service architecture with factory pattern
 
-### 1. The `pgvector` and PostgreSQL on Windows Gauntlet
+### Key Capabilities
 
-**Context:** A significant portion of the initial project setup was dedicated to correctly installing, compiling, and configuring the `pgvector` extension for PostgreSQL on a Windows development machine.
-
-**Faulty Assumptions vs. Reality:**
-
-- **Assumption:** Installing `pgvector` would be a simple `pip install pgvector` and adding the extension in PostgreSQL.
-- **Reality:** `pgvector` requires compilation from source on Windows, which depends on a specific, non-default component of Visual Studio: the C++ build tools (`nmake.exe`). This led to a multi-day troubleshooting process involving Visual Studio Installer, environment variables (`vcvarsall.bat`), and discovering compiler/linker errors.
-
-- **Assumption:** The `DATABASE_URL` in our `.env` file pointed to the database we were actively managing in `psql`.
-- **Reality:** We were meticulously enabling the `vector` extension in a `media_buddy` database while the `.env` file still pointed to the old `job_commando` database. This caused the classic `type "vector" does not exist` error, which sent us on a wild goose chase, suspecting our Python code or SQLAlchemy models.
-
-- **Assumption:** A newer version of PostgreSQL (17) would be stable.
-- **Reality:** The initial version of PostgreSQL 17 had a known linker bug that prevented `pgvector` from compiling correctly. The solution was to upgrade to a patched version (17.3+).
-
-**Key Takeaways & Protocol:**
-
-1.  **Verify Environment First:** Before debugging application code, _always_ verify the environment. For database issues, create a simple, temporary script (`check_env.py`) to load the application's configuration and print the exact `DATABASE_URL`. This is the only source of truth.
-2.  **Activate Extensions Manually & Specifically:** The `CREATE EXTENSION vector;` command must be run _inside the specific database the application connects to_. It is not a global setting.
-3.  **Use a Robust `init-db` Command:** Don't just rely on `db.create_all()`. Create a Flask CLI command that explicitly drops all tables, creates them again, and then runs `CREATE EXTENSION IF NOT EXISTS vector;`. This makes your setup idempotent and resilient to schema changes.
-4.  **For a detailed walkthrough of the correct post-compilation setup, see `private/TO-MEDIA-BUDDY/PGVECTOR_IMPLEMENTATION_GUIDE.MD`.**
-
-### 2. Python Environment & Project Structure
-
-- **Faulty Assumption:** We could just start coding.
-- **Reality:** The initial project structure, inherited from a previous project, contained circular dependencies and misplaced CLI command definitions. This required a significant refactoring effort:
-  - **Circular Imports:** The `db` object caused a loop between `__init__.py` and `models.py`. **Solution:** We created an `extensions.py` file to house the `db = SQLAlchemy()` instance, which both `__init__.py` and `models.py` can import from without issue.
-  - **CLI Commands:** Flask CLI commands should be defined and registered within the `create_app` factory function, not in the top-level `run.py`. This ensures they run within the application context.
-
-### 3. Replicate API Integration
-
-- **Context:** Implementing the image-to-image stylization feature required integrating the Replicate API. This process involved a series of cascading errors.
-- **Faulty Assumptions vs. Reality:**
-  - **Assumption:** The local development environment was not the source of errors. **Reality:** Forgetting to activate the Python `venv` caused misleading PowerShell errors that masked the true problem.
-  - **Assumption:** The Replicate Python client's methods could be inferred. **Reality:** We made several incorrect assumptions about how to pass file inputs and handle file outputs, leading to multiple rounds of debugging.
-- **Key Takeaway:** The successful solution was found by abandoning complex assumptions and consulting our own project's simple reference snippets (`private/replicate_snippets`). When integrating an external service, **always start with the simplest possible example** and **trust your own documentation**. For a full breakdown, see the "Onion of API Errors" case study in `TROUBLESHOOTING.MD`.
-
-### 4. Collaborative Workflow State Management Crisis & Resolution
-
-- **Context:** After implementing the collaborative writing workflow, users encountered "Cannot add contribution at this time. Current phase: discovery" errors even after workflow initialization.
-- **Faulty Assumptions vs. Reality:**
-  - **Assumption:** Workflow state would persist across Flask CLI commands in memory. **Reality:** Each Flask command runs in a separate process, so in-memory state was lost between commands.
-  - **Assumption:** Database workflow_phase field alone was sufficient for state management. **Reality:** The PipelineOrchestrator needed to reconstruct full workflow state from database fields when not found in memory.
-- **Solution:** Enhanced `PipelineOrchestrator.get_workflow_state()` to automatically restore workflow state from database analysis:
-  - Has `raw_content` → `USER_CONTRIBUTION` phase
-  - Has `user_contribution` → `AI_ENHANCEMENT` phase
-  - Has `enhanced_content` → `TIMELINE_GENERATION` phase
-  - etc.
-- **Key Takeaway:** Flask CLI commands are stateless processes. State management systems must be database-driven with intelligent restoration logic.
-
-### 5. Timeline Generation Enhancement: Text Content Integration
-
-- **Context:** Original timeline generation only provided scene descriptions for image generation, lacking actual text content for timing and narrative analysis.
-- **Problem:** Users couldn't analyze speaking duration or understand narrative flow from descriptions alone.
-- **Solution:** Enhanced `generate_timeline()` to include four components per scene:
-  - `text`: Actual script content (15-25 words per scene)
-  - `description`: Visual scene description for image generation
-  - `scene`: Scene numbering
-  - `is_user_scene`: Personal vs. general scene detection
-- **Duration Analysis:** Added automatic timing estimates (150 words/minute) for video production planning.
-- **Key Takeaway:** AI-generated timelines need both narrative content AND visual descriptions to be production-ready.
-
-### 6. Video Composition Layout Control Success
-
-- **Context:** Users needed flexible control over video layout, specifically wanting recorded video on TOP rather than BOTTOM of image slideshow.
-- **Challenge:** FFmpeg overlay positioning required precise coordinate calculations and filter chain management.
-- **Solution:** Modified `VideoCompositor` to:
-  - Place recorded video at `y_offset = 0` (top)
-  - Position images at `y_offset = scaled_video_height` (bottom)
-  - Maintain proper scaling and aspect ratios
-- **Result:** Professional video layout with recorded content prominently displayed above supporting visual materials.
-- **Key Takeaway:** Video composition flexibility is crucial for different content types and user preferences.
-
-### 7. Archive.is Integration Breakthrough
-
-- **Context:** Traditional news APIs only provided 214-character snippets, limiting content quality for AI enhancement.
-- **Solution:** Implemented multi-tier fallback system:
-  - Primary: archive.is content extraction
-  - Secondary: archive.today fallback
-  - Tertiary: Wayback Machine retrieval
-- **Results:** 20-40x content increase (from 214 chars to 4,000-8,900 chars) with 60%+ success rate
-- **Key Challenge:** Rate limiting (429 errors) from archive.is/archive.today, but Wayback Machine provided reliable fallback.
-- **Architecture:** Modular `ArchiveService` inheriting from `ArticleService` with Playwright-based content extraction.
-- **Key Takeaway:** Content quality is foundational to AI enhancement. Multi-tier fallback systems provide reliability against web scraping challenges.
-
-### 8. Database Migration Management
-
-- **Context:** Collaborative workflow features required new database columns (`user_contribution`, `enhanced_content`, `workflow_phase`, `workflow_metadata`).
-- **Problem:** Migration files existed but weren't applied, causing "column does not exist" errors.
-- **Solution:** Proper migration workflow: `flask db upgrade` applies pending migrations.
-- **Key Takeaway:** Always check migration status (`flask db current`) before troubleshooting database schema issues.
-
-### 9. Standalone CLI Command Development Success
-
-- **Context:** Implementing `flask voice-respond` command for Thompson's voice generation outside core workflows.
-- **Challenge:** Building utility commands that leverage existing infrastructure without interference.
-- **Console vs Application Error Distinction:**
-  - **Issue:** PowerShell PSReadLine exceptions appeared during long command execution
-  - **Reality:** Console rendering issues (cursor positioning) are separate from Flask application functionality
-  - **Key Learning:** Don't panic when seeing PSReadLine/console display errors - verify if the actual Flask command succeeded
-- **Architectural Success Patterns:**
-  - **Reuse Existing Infrastructure:** Leveraged `get_writing_style_examples()` and established Gemini prompting patterns
-  - **Complete Isolation:** Built standalone command independent of workflow orchestration
-  - **Consistent File Organization:** Used established `private/writing_style_samples/` directory structure
-- **Implementation Results:**
-  - Zero infrastructure issues due to following established patterns
-  - Clean separation from core workflows prevents interference
-  - Smooth development cycle with modular architecture approach
-- **Key Takeaway:** Utility commands benefit from complete architectural isolation while leveraging existing service layer components. Console display errors don't indicate application failures.
-
-### 10. File-to-Timeline Bridge & Pathway Unification Success
-
-- **Context:** Different content creation pathways (voice-respond files, news articles, user stories) needed unified access to timeline generation and the complete media production pipeline.
-- **Challenge:** Bridge file-based content outputs to database-driven workflow system without disrupting existing architecture.
-- **Solution Architecture:**
-  - **Bridge Function:** `generate_timeline_from_file()` in `text_processor.py` reads any text file and generates timeline using existing `generate_timeline()` function
-  - **CLI Integration:** `flask generate-timeline-from-file` command with preview mode and database integration options
-  - **Database Compatibility:** Creates pseudo-article entries with `workflow_phase='timeline_generated'` for seamless integration
-  - **Content Processing:** Intelligent parsing to extract main content from markdown headers and metadata
-- **Pathway Unification Results:**
-  - **Pathway A**: Prompt → `voice-respond` → file → timeline → database (COMPLETE)
-  - **Pathway B**: News query → database → timeline (existing, maintained)
-  - **Pathway C**: News + text file → database → timeline (existing, maintained)
-  - **Pathway D**: Prompt + context file → `voice-respond` → timeline → database (COMPLETE)
-- **Database Model Learning:**
-  - **Issue:** Initial implementation used `created_at=datetime.utcnow()` in NewsArticle constructor
-  - **Reality:** NewsArticle model doesn't include `created_at` field in constructor
-  - **Solution:** Removed invalid field, letting SQLAlchemy handle timestamp defaults
-- **Implementation Success Factors:**
-  - **Reused Existing Infrastructure:** Leveraged established `generate_timeline()` function and database patterns
-  - **Clean Separation:** Bridge function isolated in text_processor.py without workflow orchestration dependencies
-  - **Preview Mode:** Safe testing with `--preview-only` flag before database commits
-  - **Complete Integration:** Seamless handoff to existing `timeline-approve` and `video-compose` commands
-- **Testing Results:**
-  - ✅ Successfully generated 11-17 scene timelines from voice-respond outputs
-  - ✅ Database integration working with Article IDs 339 and 340
-  - ✅ Complete pathway A and D end-to-end verification
-  - ✅ No disruption to existing pathways B and C
-- **Key Takeaway:** Architectural bridges can unify disparate content pathways by identifying common interfaces (timeline generation) and following established database patterns. File-based and database-driven systems can coexist seamlessly with proper abstraction layers.
+- **Voice Preservation**: Maintains Thompson's authentic writing style using RAG system
+- **Content Quality**: 4,000-8,900 character articles vs 214-character snippets
+- **Visual Production**: 15+ theme styles with professional video composition
+- **Workflow Flexibility**: Multiple content pathways (news, prompts, files)
+- **State Management**: Database-driven workflow with progress tracking
 
 ---
 
-_This document should be updated after every major feature implementation or significant troubleshooting session._
+## Lessons Learned & Technical Insights
+
+### 1. The `pgvector` and PostgreSQL on Windows Challenge
+
+**Context**: Initial setup required compiling `pgvector` extension for PostgreSQL on Windows.
+
+**Critical Mistakes**:
+
+- **Assumption**: Installing `pgvector` would be simple `pip install`
+- **Reality**: Requires Visual Studio C++ build tools and `nmake.exe` compilation
+- **Database Confusion**: Enabled `vector` extension in wrong database while `.env` pointed to old database
+
+**Resolution Process**:
+
+1. Install Visual Studio C++ build tools with `nmake.exe`
+2. Set environment variables via `vcvarsall.bat`
+3. Compile `pgvector` from source
+4. **Critical**: Run `CREATE EXTENSION vector;` in the _specific_ database from `DATABASE_URL`
+
+**Protocol Established**:
+
+- Always verify environment with `check_env.py` script
+- Use `flask init-db` command for idempotent database setup
+- PostgreSQL 17.3+ required (17.0 had linker bugs)
+
+### 2. Service Architecture & Modular Design Success
+
+**Challenge**: Integrate multiple news sources with consistent interface.
+
+**Solution**: Factory pattern with pluggable services
+
+- `ArticleServiceFactory` for source abstraction
+- `GoogleNewsService`, `NewsAPIService` for specific implementations
+- Consistent return types across all services
+
+**Key Insights**:
+
+- **Type consistency essential**: All services must return same data structure
+- **Content quality > API reliability**: 60% success with full articles beats 100% snippets
+- **Graceful degradation**: Archive.is → archive.today → Wayback Machine fallback
+
+### 3. Archive.is Integration Breakthrough
+
+**Problem**: NewsAPI only provided 214-character snippets, limiting AI enhancement quality.
+
+**Solution**: Multi-tier content acquisition system
+
+- **Primary**: Archive.is content extraction
+- **Secondary**: Archive.today fallback
+- **Tertiary**: Wayback Machine retrieval
+
+**Results**: 20-40x content increase (214 chars → 4,000-8,900 chars) with 60%+ success rate
+
+**Technical Implementation**:
+
+- Playwright-based content extraction
+- Rate limiting handling (429 errors)
+- Modular `ArchiveService` inheriting from `ArticleService`
+
+### 4. Workflow State Management Crisis & Resolution
+
+**Problem**: "Cannot add contribution at this time" errors after workflow initialization.
+
+**Root Cause**: Flask CLI commands are stateless processes - in-memory state lost between commands.
+
+**Solution**: Database-driven state reconstruction
+
+- Enhanced `PipelineOrchestrator.get_workflow_state()`
+- Automatic workflow restoration from database analysis
+- Phase detection: `raw_content` → `USER_CONTRIBUTION`, `user_contribution` → `AI_ENHANCEMENT`, etc.
+
+**Architecture Pattern**: All Flask CLI commands must be stateless with database-driven state management.
+
+### 5. Video Composition Layout Control
+
+**Challenge**: Users needed flexible video layout control (recorded video on top vs bottom).
+
+**Solution**: Configurable `VideoCompositor` with precise coordinate control
+
+- User video at `y_offset = 0` (top) or `y_offset = scaled_video_height` (bottom)
+- Image slideshow positioned complementarily
+- Maintained proper scaling and aspect ratios
+
+**Result**: Professional video composition with user content prominently displayed.
+
+### 6. Timeline Generation Enhancement
+
+**Problem**: Original timeline only provided scene descriptions, lacking narrative content and timing.
+
+**Solution**: Enhanced `generate_timeline()` with four components per scene:
+
+- `text`: Actual script content (15-25 words per scene)
+- `description`: Visual scene description for image generation
+- `scene`: Scene numbering
+- `is_user_scene`: Personal vs general scene detection
+
+**Added Features**:
+
+- Duration analysis (150 words/minute timing estimates)
+- Production-ready timeline with narrative flow analysis
+
+### 7. Voice Response System Architecture
+
+**Challenge**: Build standalone voice generation outside main workflows.
+
+**Solution**: `flask voice-respond` command with complete architectural isolation
+
+- Reused existing `get_writing_style_examples()` infrastructure
+- Clean separation from workflow orchestration
+- File-based output in `private/writing_style_samples/output/enhanced_scripts/`
+
+**Key Pattern**: Console display errors (PSReadLine) are separate from Flask application functionality.
+
+### 8. File-to-Timeline Bridge Implementation
+
+**Challenge**: Unify multiple content pathways (voice-respond, news, user files) to access complete media production pipeline.
+
+**Solution**: `generate_timeline_from_file()` bridge function
+
+- Reads any text file and generates timeline using existing infrastructure
+- Database compatibility with pseudo-article creation
+- Seamless handoff to `timeline-approve` and `video-compose` commands
+
+**Unified Pathways**:
+
+- **A**: Prompt → `voice-respond` → `generate-timeline-from-file` → database
+- **B**: News query → database → timeline (existing)
+- **C**: News + text file → database → timeline (story-create)
+- **D**: Prompt + context file → `voice-respond` → timeline → database
+
+### 9. Concept-Based Timeline Generation
+
+**Problem**: Timeline images too random/disconnected from content, insufficient image quantity.
+
+**Solution**: Concept-based analysis before timeline generation
+
+- `generate_concept_based_timeline()` analyzes content for key concepts first
+- Better segmentation: 15-25 words per scene (not 30-60)
+- Single-focus rule: Each scene shows ONE thing only
+- Concept-informed visuals using thematic analysis
+
+**T5/FLUX Prompting Optimization**:
+
+- Natural language complete sentences vs keyword lists
+- Banned composite descriptions ("A and B", "while", keyword spam)
+- T5-style examples: "A middle-aged businessman sits at his desk, rubbing his temples"
+- Logical structure: Subject → Action/Pose → Setting → Lighting → Style
+
+### 10. Cost Control & Theme Integration
+
+**Challenge**: Expensive FLUX Kontext step for theme application.
+
+**Solution**: Direct theme integration approach
+
+- `--no-kontext` flag concept for 50% cost savings
+- Themes applied directly to prompts: "The scene is styled with retro anime 80s style"
+- Generation modes: 'direct_theme_integration' vs 'standard_with_kontext'
+
+### 11. Git History Crisis & Resolution
+
+**Problem**: Accidentally committed sensitive Google OAuth tokens when changing from `private/` to `.private/`.
+
+**Resolution**:
+
+- Used `git filter-branch` to remove sensitive files from all commits
+- Created `backup-before-history-clean` branch
+- Restored working `token.json` file after cleanup
+- GitHub push protection successfully prevented token exposure
+
+**Protocol**: Never commit sensitive credentials; use `.gitignore` and `.private/` directories.
+
+### 12. Development Environment Consistency
+
+**Challenge**: Cursor's integrated terminal not loading PowerShell profile.
+
+**Solution**: Global Cursor settings configuration
+
+- Configure PowerShell profile loading in `.vscode/settings.json`
+- Ensure consistent environment across development sessions
+
+### 13. Documentation Organization
+
+**Problem**: Overlapping troubleshooting documents with redundant content.
+
+**Solution**: Consolidated documentation structure
+
+- Enhanced `TROUBLESHOOTING_FLUX_PROMPTING.MD` with comprehensive guide
+- Enhanced `TESTING_STRATEGY.md` with systematic testing patterns
+- Created navigation `README.md` for document hierarchy
 
 ---
 
-## Project Roadmap & Milestones
+## Current System Status
 
-This roadmap outlines the planned development phases for Media Buddy. It defines the discrete steps, their completion criteria, and when we should pause to update this document.
+### Production-Ready Features ✅
 
-### General Principles
+**Core Architecture**:
 
-- **When is a feature "complete"?** A feature is considered complete when it is implemented as a self-contained, modular Flask CLI command. The command should perform a single, well-defined task (e.g., `generate-timeline`, `find-images`), using a specific article ID as input, and save its output back to the database or file system. It must include clear logging to indicate success or failure.
-- **When do we update `SUMMARY.MD`?** We will update the "Lessons Learned" section after completing any milestone that introduces a new technology (e.g., a new API, a browser tool) or overcomes a significant, unexpected challenge.
+- [x] Modular service architecture with factory pattern
+- [x] Google News + Archive.is content acquisition
+- [x] Database schema with workflow tracking
+- [x] Collaborative writing service implementation
+- [x] Pipeline orchestrator with state management
+- [x] Video composition with layout control
+- [x] Complete CLI command suite
 
----
+**Content Generation Workflows**:
 
-### Phase 1: Foundation & Core Pipeline (Status: COMPLETED)
+- [x] **story-create**: Story-first approach with news context
+- [x] **script-generate**: AI blends user story + news in Thompson's voice
+- [x] **timeline-approve**: Complete visibility before image generation
+- [x] **video-compose**: Professional video composition
+- [x] **voice-respond**: Standalone voice generation utility
 
-This phase involved setting up a stable development environment and building the essential data ingestion and processing backbone of the application.
+**Advanced Features**:
 
-- **Milestone 1.1: Environment & Dependency Setup**
+- [x] Concept-based timeline generation with T5 optimization
+- [x] Cost control through direct theme integration
+- [x] File-to-timeline bridge for unified content pathways
+- [x] New CLI testing commands (`test-concept-analysis`, `preview-concept-timeline`)
 
-  - **Task:** Create a stable Python virtual environment and resolve all dependency issues.
-  - **"Done" Criteria:** The `requirements.txt` file is clean, includes `pgvector`, and all packages install successfully via `pip install -r requirements.txt`.
-  - **Status: ✅ COMPLETED**
+### Integration Achievements
 
-- **Milestone 1.2: Database Integration**
-
-  - **Task:** Configure PostgreSQL, compile and install the `pgvector` extension, and connect it to the Flask app.
-  - **"Done" Criteria:** The `flask init-db` command runs without error, successfully creating the database schema, including a `Vector` type column.
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 1.3: Application Refactoring**
-
-  - **Task:** Restructure the application to eliminate circular dependencies and properly register CLI commands.
-  - **"Done" Criteria:** The app runs without import errors. The `db` instance is in `extensions.py`, and CLI commands are in `__init__.py`.
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 1.4: Core Data Ingestion & Processing**
-  - **Task:** Build the commands to fetch news articles and then process them to generate summaries and vector embeddings.
-  - **"Done" Criteria:** `flask fetch-news` populates the database, and `flask process-articles` correctly fills in the `summary` and `embedding` columns for those articles.
-  - **Status: ✅ COMPLETED**
-
----
-
-### Phase 2: Stylized Narrative Generation (Status: ✅ COMPLETED)
-
-This phase focuses on transforming a raw news article summary into a structured narrative that matches your unique writing voice.
-
-- **Milestone 2.1: The Voice Adopter**
-
-  - **Task:** Create a module to generate text in your specific writing style.
-  - **"Done" Criteria / How to Test:** The `flask generate-voiced-summary` command successfully populates the `voiced_summary` field in the database.
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 2.2: The Timeline Architect**
-  - **Task:** Convert the voice-matched summary into a structured, sequential timeline of events or scenes.
-  - **"Done" Criteria / How to Test:** The `flask generate-timeline` command populates the `timeline_json` field with a valid JSON list of scenes.
-  - **Status: ✅ COMPLETED**
+- **Content Quality**: 4,000-8,900 character articles vs 214-char snippets
+- **State Persistence**: Database-driven workflow restoration
+- **Voice Preservation**: RAG-based authentic voice matching
+- **Timeline Enhancement**: Text content + visual descriptions + duration estimates
+- **Pathway Unification**: All content types access complete production pipeline
 
 ---
 
-### Phase 3: Visual Asset Production (Status: ✅ COMPLETED)
+## Technical Architecture Summary
 
-This phase focuses on creating a sequence of stylistically coherent images that correspond to the narrative timeline.
+### Database Schema
 
-- **Milestone 3.1: The Image Scout & Raw Image Generation**
+- **NewsArticle**: Core content with workflow tracking
+- **Workflow phases**: discovery → contribution → enhancement → timeline → video
+- **JSON fields**: Enhanced content, timeline data, workflow metadata
+- **Vector embeddings**: Content search and similarity matching
 
-  - **Task:** For each scene in the timeline, source an image prompt and generate a "raw" image focused on content accuracy.
-  - **"Done" Criteria / How to Test:** The `flask source-images` and `flask generate-raw-images` commands successfully run, updating the `timeline_json` with prompts and saving raw images to the `instance/images/` directory. Each scene object in the timeline contains a `raw_image_path`.
-  - **Status: ✅ COMPLETED**
+### Service Layer
 
-- **Milestone 3.2: The Image Artist & Stylization**
-  - **Task:** Apply a consistent stylistic transformation to all raw images using a theme-based system.
-  - **"Done" Criteria / How to Test:** The `flask stylize-images --theme <theme_name>` command runs successfully. It takes the raw images, applies the selected style via the Replicate API, and saves the new images (e.g., `scene_1_styled.png`) to the filesystem. The `timeline_json` for each scene is updated with a `stylized_image_path`.
-  - **Status: ✅ COMPLETED**
+- **ArticleServiceFactory**: Pluggable content sources
+- **CollaborativeWritingService**: User/AI enhancement
+- **PipelineOrchestrator**: Workflow state management
+- **VideoCompositor**: Media assembly
+- **ArchiveService**: Content extraction with fallback
+
+### CLI Command Structure
+
+```
+# Content Discovery
+flask discover-story "query" → flask create-article --auto
+
+# Collaborative Writing
+flask contribute-take --article-id N → flask enhance-writing --article-id N
+
+# Visual Production
+flask process-visuals --theme X → flask assemble-final --article-id N
+
+# Utility Commands
+flask voice-respond --query "prompt" --length 200
+flask generate-timeline-from-file --file-path "content.txt"
+```
+
+### File Organization
+
+- `.private/writing_style_samples/`: Thompson's voice training data
+- `.private/assets/`: Generated images and video files
+- `.private/documentation/`: Comprehensive troubleshooting guides
+- `.dev/`: Development and testing utilities
 
 ---
 
-### Phase 4: Collaborative Writing Workflow (Status: ✅ COMPLETED)
+## Critical Development Protocols
 
-This phase introduced human-AI collaboration for authentic content creation with workflow state management.
+### AI Assistant Onboarding
 
-- **Milestone 4.1: Collaborative Writing Infrastructure**
+1. **Read ALL schematic documents** in `.private/customization/`
+2. **Understand project history** and resolved problems
+3. **Check what approaches failed** before proposing solutions
+4. **Build on existing solutions** rather than rebuilding
 
-  - **Task:** Implement modular service architecture for user contribution and AI enhancement.
-  - **Achievement:** Created `CollaborativeWritingService`, `PipelineOrchestrator`, and complete CLI workflow.
-  - **Status: ✅ COMPLETED**
+### Environment Requirements
 
-- **Milestone 4.2: Workflow State Management**
+- **Windows PowerShell exclusively** - NOT Linux/Mac/Bash
+- **PowerShell syntax**: `$env:VARIABLE = "value"`
+- **Command execution**: AI provides, Thompson executes
+- **"New errors are good errors"** - sequential debugging expected
 
-  - **Task:** Persistent workflow tracking across CLI commands and session boundaries.
-  - **Achievement:** Database-driven state restoration from article fields with intelligent phase detection.
-  - **Status: ✅ COMPLETED**
+### Testing Philosophy
 
-- **Milestone 4.3: Archive.is Content Enhancement**
+- **Systematic validation required** before production deployment
+- **Test both success and failure cases** for all features
+- **Input/output validation** for all API integrations
+- **Threshold testing** for feature functionality
 
-  - **Task:** Breakthrough content acquisition using archived versions for full article text.
-  - **Achievement:** 20-40x content increase over traditional snippet-based approaches with 60%+ success rate.
-  - **Status: ✅ COMPLETED**
+---
 
-### Phase 5: Production-Ready Media Assembly (Status: ✅ COMPLETED)
-
-This phase brought all assets together into professional video compositions with layout control.
-
-- **Milestone 5.1: Enhanced Timeline Generation**
-
-  - **Task:** Include both narrative text and visual descriptions with duration analysis.
-  - **Achievement:** Four-component timeline structure (text, description, timing, scene type) with 150 WPM estimates.
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 5.2: Video Composition with Layout Control**
-
-  - **Task:** Flexible video composition allowing user control over layout and positioning.
-  - **Achievement:** `VideoCompositor` service with configurable recorded video positioning (top/bottom).
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 5.3: Complete Asset Assembly Pipeline**
-  - **Task:** End-to-end asset packaging with automatic image copying and organization.
-  - **Achievement:** `assemble-final` command with structured output directory and metadata tracking.
-  - **Status: ✅ COMPLETED**
-
-### Phase 6: Streamlined Turnkey Workflow (Status: ✅ COMPLETED)
-
-This phase created a completely turnkey 5-command workflow for rapid story-to-video production.
-
-- **Milestone 6.1: Story-First Workflow Design**
-
-  - **Task:** User story drives narrative with news content as supporting context.
-  - **Achievement:** `story-create` command combining preliminary story with 3 reliable news articles.
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 6.2: Enhanced Script Generation**
-
-  - **Task:** AI blends user story with news context in Thompson's authentic voice.
-  - **Achievement:** `script-generate` with `generate_voiced_story_from_user_and_news()` function.
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 6.3: Complete Visibility Timeline Approval**
-
-  - **Task:** Full timeline review before committing to image generation.
-  - **Achievement:** `timeline-approve` shows complete text + visuals + duration estimates before processing.
-  - **Status: ✅ COMPLETED**
-
-- **Milestone 6.4: Final Video Composition Integration**
-  - **Task:** Seamless video composition with user's recorded content.
-  - **Achievement:** `video-compose` command with automatic asset management and professional layout.
-  - **Status: ✅ COMPLETED**
+_This document should be updated after every major feature implementation or significant troubleshooting session. It serves as the definitive reference for AI agents to understand the complete project scope, technical decisions, and lessons learned._

@@ -97,6 +97,11 @@ REPLICATE_API_TOKEN=your_replicate_token_here
 
 # Service Configuration
 ARTICLE_SERVICE=googlenews
+
+# User Personalization
+# The USER_PROMPT is a tool to use a Flux LoRA model on Replicate to generate an image of yourself. Typically this is a special "secret word" determined at the time of training, along with a short description that helps the model zero in on your actual appearance.
+USER=Your_Name                     # Your name for voice generation
+USER_PROMPT=your_visual_identifier  # Your appearance description for image generation
 ```
 
 ### Step 4: Database Setup
